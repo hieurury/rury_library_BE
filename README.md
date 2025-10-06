@@ -6,30 +6,34 @@
 
 ## Công nghệ sử dụng
 
-### 1. Nodejs (javascript) ![Node.js](https://img.shields.io/badge/Node.js-Green?logo=node.js&logoColor=white&style=for-the-badge)
+### 1. ![Node.js](https://img.shields.io/badge/Node.js-339933?logo=node.js&logoColor=white&style=for-the-badge)
 
 Đường dẫn
+
     https://nodejs.org/en
 
 Môi trường chạy javascript (javascript runtime). Chịu trách nhiệm chính cho logic của server.
 
-### 2. ExpressJS ![ExpressJS](https://img.shields.io/badge/ExpressJS-gray?logo=express&style=for-the-badge)
+### 2. ![ExpressJS](https://img.shields.io/badge/ExpressJS-gray?logo=express&style=for-the-badge)
 
 Đường dẫn
+
     https://www.npmjs.com/package/express
 
 Framework nổi tiếng cho Nodejs, chịu trách nhiệm phân luồng, chia route cũng như các truy vấn http/https,....
 
-### 3. MongoDB ![Mongoose](https://img.shields.io/badge/Mongoose-Blue?logo=mongoose&logoColor=white&style=for-the-badge)
+### 3. ![Mongoose](https://img.shields.io/badge/Mongoose-4A90E2?logo=mongodb&logoColor=white&style=for-the-badge)
 
 Đường dẫn
+
     https://www.npmjs.com/package/mongoose
 
 Sử dụng CSDL NoSQL MongoDB với thư viện Mongoose với các truy vấn ORM đơn giản và dễ hiểu.
 
-### 4. Multer ![Multer](https://img.shields.io/badge/Multer-Orange?logo=express&logoColor=white&style=for-the-badge)
+### 4. ![Multer](https://img.shields.io/badge/Multer-ff8800?logo=express&logoColor=white&style=for-the-badge)
 
 Đường dẫn
+
     https://www.npmjs.com/package/multer
 
 Một middleware cho ExpressJS dùng để xử lý các truy vấn dữ liệu liên quan đến multipart/form-data là dữ liệu upload về file.
