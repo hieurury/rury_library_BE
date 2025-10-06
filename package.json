@@ -1,0 +1,25 @@
+{
+  "name": "rury_lib_server",
+  "version": "1.0.0",
+  "description": "server for rury_lib",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "nodemon --inspect src/server.js"
+  },
+  "keywords": [
+    "rury_lib",
+    "hieurury"
+  ],
+  "author": "hieurury",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.2",
+    "express": "^5.1.0",
+    "mongoose": "^8.18.1",
+    "multer": "^2.0.2",
+    "nodemon": "^3.1.10"
+  }
+}
