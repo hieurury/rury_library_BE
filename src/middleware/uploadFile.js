@@ -2,7 +2,7 @@ import multer from "multer";
 import path from "path";
 
   //multer
-const storage = multer.diskStorage({
+const categoriesStorage = multer.diskStorage({
   destination: function (req, file, cb) {
     cb(null, 'src/public/imgs/categories-imgs');
   },
@@ -12,6 +12,17 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ storage: storage });
+const booksStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, 'src/public/imgs/books-imgs');
+  },
+  //tên file là tên gốc
+  filename: function (req, file, cb) {
+    cb(null, file.originalname);
+  }
+});
 
-export { upload };
+const uploadCategoriesImage = multer({ storage: categoriesStorage });
+const uploadBooksImage = multer({ storage: booksStorage });
+
+export { uploadCategoriesImage, uploadBooksImage };

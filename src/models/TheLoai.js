@@ -6,7 +6,7 @@ const TheLoai = new Schema({
     MaLoai: { type: String, required: true },
     TenLoai: { type: String, required: true },
     MoTa: { type: String, required: false },
-    Icon: { type: String, default: '/imgs/categories-imgs/book.svg' },
+    Icon: { type: String, default: 'public/imgs/categories-imgs/book.svg' },
     Color: { type: String, default: '#4E3603' }
 }, { timestamps: true })
 

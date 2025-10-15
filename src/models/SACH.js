@@ -37,7 +37,7 @@ const SACH = new Schema({
         default: 1
     },
     NAMXUATBAN: {
-        type: Number,
+        type: Date,
         required: false
     },
     MAXB: {

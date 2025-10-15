@@ -34,10 +34,11 @@ const generateMaBanSao = async (MASACH, MA_DA_CO) => {
     }
 }
 
-//POST: /admin/sach/create
+//POST: /sach/admin/create
 const createSach = async (req, res, next) => {
     try {
         const data = req.body;
+        console.log(data);
         //generate MASACH
         const MASACH = await generateMaSach();
         const SOLUONG = data.SOQUYEN;
@@ -55,10 +56,10 @@ const createSach = async (req, res, next) => {
         });
 
         //kiểm tra nhà xuất bản
-        const nxb = await NHAXUTBAN.findOne({ MANXB: data.MAXB });
+        const nxb = await NHAXUTBAN.findOne({ MANXB: data.MANXB });
         if(!nxb) {
             const error = new Error("Nhà xuất bản không tồn tại, vui lòng kiểm tra lại!");
-            error.statusCode = 400;
+            // error.statusCode = 400;
             return next(error);
         }
         //kiểm tra thể loại
@@ -68,7 +69,7 @@ const createSach = async (req, res, next) => {
         }));
         if(invalidTheLoai.includes(true)) {
             const error = new Error("Thể loại không hợp lệ, vui lòng kiểm tra lại!");
-            error.statusCode = 400;
+            // error.statusCode = 400;
             return next(error);
         }
 
@@ -80,11 +81,12 @@ const createSach = async (req, res, next) => {
             DONGIA: data.DONGIA,
             SOQUYEN: SOLUONG,
             NAMXUATBAN: data.NAMXUATBAN,
-            MAXB: data.MAXB,
+            MAXB: data.MANXB,
             TACGIA: data.TACGIA,
             HINHANH: data.HINHANH,
             THELOAI: data.THELOAI || []
         })
+        console.log(sachNew);
         
         //kiem tra lưu
         const sachSaved = await sachNew.save();
@@ -112,7 +114,53 @@ const createSach = async (req, res, next) => {
     }
 }
 
+//DELETE: /sach/admin/delete/:maSach
+const deleteBook = async (req, res, next) => {
+    try {
+        const { maSach } = req.params;
 
+        // Xóa sách
+        const sachDeleted = await SACH.findOneAndDelete({ MASACH: maSach });
+        if (!sachDeleted) {
+            const error = new Error("Sách không tồn tại");
+            // error.statusCode = 404;
+            return next(error);
+        }
+
+        // Xóa bản sao
+        await BanSaoSach.deleteMany({ MASACH: maSach });
+
+        res.json({
+            status: "success",
+            message: "Xóa sách thành công"
+        });
+    } catch (error) {
+        next(error);
+    }
+}
+
+const uploadBookImage = async (req, res, next) => {
+    try {
+        if (!req.file) {
+            const error = new Error("Vui lòng chọn file để upload");
+            error.statusCode = 400;
+            return next(error);
+        }
+        //nếu có file thì trả về đường dẫn
+        //replace \\ thành /
+        const customPath = req.file.path.replace(/\\/g, '/').replace('src/', '');
+        
+        res.json({
+            status: "success",
+            message: "Tải ảnh sách thành công",
+            imagePath: customPath
+        });
+    } catch (error) {
+        next(error);
+    }
+}
+
+// ===================== BOTH ===================== //
 //GET: /sach/all
 const getAllSach = async (req, res, next) => {
     try {
@@ -123,6 +171,7 @@ const getAllSach = async (req, res, next) => {
             return {
                 MASACH: sach.MASACH,
                 TENSACH: sach.TENSACH,
+                MOTA: sach.MOTA,
                 DONGIA: sach.DONGIA,
                 SOQUYEN: sach.SOQUYEN,
                 NAMXUATBAN: sach.NAMXUATBAN,
@@ -132,6 +181,7 @@ const getAllSach = async (req, res, next) => {
                 THELOAI: theloai,
             };
         }));
+
         res.json({
             status: "success",
             message: "Lấy danh sách sách thành công",
@@ -144,5 +194,7 @@ const getAllSach = async (req, res, next) => {
 
 export default {
     createSach,
-    getAllSach
+    getAllSach,
+    uploadBookImage,
+    deleteBook
 }

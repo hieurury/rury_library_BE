@@ -1,4 +1,5 @@
 import TheLoai from '../models/TheLoai.js';
+import SACH from '../models/SACH.js';
 import Counter from '../models/Counter.js';
 
 const generateMaLoai = async (TenLoai) => {
@@ -44,13 +45,22 @@ const createTheLoai = async (req, res, next) => {
 }
 
 //GET: /the-loai/all
-const getAllCategories = async (req, res, next) => {
+const getAllCategories      =   async (req, res, next) => {
     try {
-        const categories = await TheLoai.find();
+        const categories    =   await TheLoai.find();
+        const books         =   await SACH.find();
+        //thêm số lượng sách vào từng thể loại
+        const finalCategories = categories.map(category => {
+            const bookCount =   books.filter(book => book.THELOAI.includes(category.MaLoai)).length;
+            return {
+                ...category.toObject(),
+                BookCount: bookCount
+            };
+        });
         res.json({
             status: "success",
             message: "Lấy danh sách thể loại thành công",
-            data: categories
+            data: finalCategories
         });
     } catch (error) {
         next(error);
@@ -81,5 +91,5 @@ const uploadCategoryIcon = async (req, res, next) => {
 export default {
     createTheLoai,
     uploadCategoryIcon,
-    getAllCategories
+    getAllCategories,
 };

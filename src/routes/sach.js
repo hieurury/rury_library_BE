@@ -1,12 +1,12 @@
 import express from 'express';
 const sachRouter = express.Router();
-
+import {uploadBooksImage} from '../middleware/uploadFile.js';
 import sachController from '../controller/sachController.js';
 
 //========================== ADMIN ==========================//
-sachRouter.post('/create', sachController.createSach);
-
-
+sachRouter.post('/admin/create', sachController.createSach);
+sachRouter.post('/admin/upload-image', uploadBooksImage.single('image'), sachController.uploadBookImage);
+sachRouter.delete('/admin/delete/:maSach', sachController.deleteBook);
 //========================== BOTH ==========================//
 sachRouter.get('/all', sachController.getAllSach);
 

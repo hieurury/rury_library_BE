@@ -5,8 +5,8 @@ import nhaXuatBanController from '../controller/admin/nhaXuatBanController.js';
 const NhaXuatBanRouter = express.Router();
 
 //set routes
-NhaXuatBanRouter.get('/', nhaXuatBanController.getAllNhaXuatBan);
-NhaXuatBanRouter.post('/create', nhaXuatBanController.createNhaXuatBan);
+NhaXuatBanRouter.get('/all', nhaXuatBanController.getAllNhaXuatBan);
+NhaXuatBanRouter.post('/admin/create', nhaXuatBanController.createNhaXuatBan);
 
 
 //export
