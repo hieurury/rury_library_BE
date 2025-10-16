@@ -11,7 +11,7 @@ const generateAccountId = async () => {
     return `M${String(counter.seq).padStart(6, '0')}`;
 }
 
-const createAccount = async (req, res, next) => {
+const register = async (req, res, next) => {
     const data = req.body;
     try {
         const MADOCGIA = await generateAccountId();
@@ -54,6 +54,72 @@ const createAccount = async (req, res, next) => {
 };
 
 
+const login = async (req, res, next) => {
+    const { DIENTHOAI, PASSWORD } = req.body;
+    try {
+        const docGia = await DocGia.findOne({ DIENTHOAI});
+        if(!docGia) {
+            const error = new Error("Số điện thoại chưa được đăng ký");
+            return next(error);
+        }
+        if(docGia.PASSWORD !== PASSWORD) {
+            const error = new Error("Mật khẩu không đúng");
+            return next(error);
+        }
+        const resultData = {
+            MADOCGIA: docGia.MADOCGIA,
+            HOLOT: docGia.HOLOT,
+            TEN: docGia.TEN,
+            DIENTHOAI: docGia.DIENTHOAI,
+            EMAIL: docGia.EMAIL,
+        }
+        res.json({
+            status: "success",
+            message: "Đăng nhập thành công",
+            data: resultData
+        });
+
+    } catch (error) {
+        return next(error);
+    }
+};
+
+
+const getUserById = async (req, res, next) => {
+    const { id } = req.params;
+    try {
+        const docGia = await DocGia.findOne({ MADOCGIA: id });
+        if(!docGia) {
+            const error = new Error("Không tìm thấy độc giả");
+            return next(error);
+        }
+        //lấy dữ liệu gói đăng kí
+        const goi = await Package.findOne({ MaGoi: docGia.GOI.MaGoi });
+        if(!goi) {
+            const error = new Error("Không tìm thấy gói đăng kí");
+            return next(error);
+        }
+        const resultData = {
+            MADOCGIA: docGia.MADOCGIA,
+            HOLOT: docGia.HOLOT,
+            TEN: docGia.TEN,
+            DIENTHOAI: docGia.DIENTHOAI,
+            EMAIL: docGia.EMAIL,
+            GOI: goi
+        }
+        res.json({
+            status: "success",
+            message: "Lấy thông tin độc giả thành công",
+            data: resultData
+        });
+
+    } catch (error) {
+        return next(error);
+    }
+};
+
 export default {
-    createAccount,
+    register,
+    login,
+    getUserById
 }

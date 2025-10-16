@@ -3,7 +3,13 @@ const userRouter        =       express.Router();
 
 import userController   from    "../controller/userController.js";
 
-userRouter.post("/register", userController.createAccount);
+//GET
+userRouter.get("/get/:id", userController.getUserById);
+
+//POST
+
+userRouter.post("/register", userController.register);
+userRouter.post("/login", userController.login);
 
 
 export default userRouter;
