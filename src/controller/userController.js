@@ -105,6 +105,9 @@ const getUserById = async (req, res, next) => {
             TEN: docGia.TEN,
             DIENTHOAI: docGia.DIENTHOAI,
             EMAIL: docGia.EMAIL,
+            PHAI: docGia.PHAI,
+            DIACHI: docGia.DIACHI,
+            NGAYSINH: docGia.NGAYSINH,
             GOI: goi
         }
         res.json({
