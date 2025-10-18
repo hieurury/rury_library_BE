@@ -9,5 +9,5 @@ sachRouter.post('/admin/upload-image', uploadBooksImage.single('image'), sachCon
 sachRouter.delete('/admin/delete/:maSach', sachController.deleteBook);
 //========================== BOTH ==========================//
 sachRouter.get('/all', sachController.getAllSach);
-
+sachRouter.get('/:id', sachController.getSachById);
 export default sachRouter;

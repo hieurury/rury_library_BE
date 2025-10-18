@@ -192,9 +192,42 @@ const getAllSach = async (req, res, next) => {
     }
 }
 
+const getSachById = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const sach = await SACH.findOne({ MASACH: id });
+        if(!sach) {
+            const error = new Error("Không tìm thấy sách");
+            return next(error);
+        }
+        const nxb = await NHAXUTBAN.findOne({ MANXB: sach.MAXB });
+        const theloai = await TheLoai.find({ MaLoai: { $in: sach.THELOAI } });
+        const result = {
+            MASACH: sach.MASACH,
+            TENSACH: sach.TENSACH,
+            MOTA: sach.MOTA,
+            DONGIA: sach.DONGIA,
+            SOQUYEN: sach.SOQUYEN,
+            NAMXUATBAN: sach.NAMXUATBAN,
+            MAXB: nxb,
+            TACGIA: sach.TACGIA,
+            HINHANH: sach.HINHANH,
+            THELOAI: theloai,
+        };
+        res.json({
+            status: "success",
+            message: "Lấy thông tin sách thành công",
+            data: result
+        })
+    } catch (error) {
+        next(error);
+    }
+}
+
 export default {
     createSach,
     getAllSach,
     uploadBookImage,
-    deleteBook
+    deleteBook,
+    getSachById
 }
