@@ -21,6 +21,14 @@ const generateMaMuon = async () => {
 const createNewMuonSach = async (req, res, next) => {
     try {
         const { MANHANVIEN, MADOCGIA, MA_BANSAO } = req.body;
+        console.log(`Yêu cầu mượn sách từ độc giả ${MADOCGIA} cho bản sao ${MA_BANSAO} bởi nhân viên ${MANHANVIEN}`);
+        //kiểm tra bản sách đã bị mượn chưa
+        const existingMuonSach = await TheoDoiMuonSach.findOne({ MA_BANSAO, TINHTRANG: 'borrowing' });
+        if (existingMuonSach) {
+            const error = new Error('Bản sao sách này đang được mượn và chưa trả.');
+            error.status = 400;
+            return next(error);
+        }
         //lấy thông tin đọc giả
         const docGia = await DOCGIA.findOne({ MADOCGIA });
         if (!docGia) {
@@ -62,6 +70,11 @@ const createNewMuonSach = async (req, res, next) => {
         });
 
         await newMuonSach.save();
+        //cập nhật tình trạng sách
+        await BanSaoSach.findOneAndUpdate(
+            { MA_BANSAO },
+            { TRANGTHAI: true }
+        );
         res.json({
             status: 'success',
             message: 'Tạo phiếu mượn sách thành công',
@@ -191,8 +204,22 @@ const getSachMuonTheoMaDocGia = async (req, res, next) => {
     }
 };
 
+const getAllMuonSach = async (req, res, next) => {
+    try {
+        const allMuonSach = await TheoDoiMuonSach.find();
+        res.json({
+            status: 'success',
+            message: 'Lấy thông tin tất cả phiếu mượn thành công',
+            data: allMuonSach
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
 export default {
     createNewMuonSach,
     getPhieuMuonChiTiet,
-    getSachMuonTheoMaDocGia
+    getSachMuonTheoMaDocGia,
+    getAllMuonSach
 };

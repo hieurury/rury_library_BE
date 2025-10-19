@@ -6,5 +6,7 @@ import theoDoiMuonSachController from '../controller/theoDoiMuonSachController.j
 theoDoiMuonSachRouter.post('/add', theoDoiMuonSachController.createNewMuonSach);
 theoDoiMuonSachRouter.get('/:MAPHIEU', theoDoiMuonSachController.getPhieuMuonChiTiet);
 theoDoiMuonSachRouter.get('/user/:MADOCGIA', theoDoiMuonSachController.getSachMuonTheoMaDocGia);
+//admin
+theoDoiMuonSachRouter.get('/admin/all', theoDoiMuonSachController.getAllMuonSach);
 
 export default theoDoiMuonSachRouter;
