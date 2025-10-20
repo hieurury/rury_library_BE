@@ -1,10 +1,9 @@
 import express          from    "express";
+import authenticateToken from "../middleware/jwt.js";
 const userRouter        =       express.Router();
 
 import userController   from    "../controller/userController.js";
 
-//GET
-userRouter.get("/get/:id", userController.getUserById);
 
 //POST
 
@@ -12,4 +11,8 @@ userRouter.post("/register", userController.register);
 userRouter.post("/login", userController.login);
 
 
+//xác thực hết dưới này
+userRouter.use(authenticateToken);
+//GET
+userRouter.get("/get/:id", userController.getUserById);
 export default userRouter;

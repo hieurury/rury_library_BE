@@ -1,6 +1,9 @@
-import DocGia from "../models/DOCGIA.js";
-import Counter from "../models/Counter.js";
-import Package from "../models/Package.js";
+import DocGia   from "../models/DOCGIA.js";
+import Counter  from "../models/Counter.js";
+import Package  from "../models/Package.js";
+import jwt      from "jsonwebtoken";
+import dotenv   from "dotenv";
+dotenv.config();
 
 const generateAccountId = async () => {
     const counter = await Counter.findOneAndUpdate(
@@ -66,6 +69,14 @@ const login = async (req, res, next) => {
             const error = new Error("Mật khẩu không đúng");
             return next(error);
         }
+        
+        // Tạo JWT token
+        const token = jwt.sign(
+            { MADOCGIA: docGia.MADOCGIA, DIENTHOAI: docGia.DIENTHOAI },
+            process.env.SECRET_JWT_KEY,
+            { expiresIn: "7d" }
+        );
+        
         const resultData = {
             MADOCGIA: docGia.MADOCGIA,
             HOLOT: docGia.HOLOT,
@@ -76,6 +87,7 @@ const login = async (req, res, next) => {
         res.json({
             status: "success",
             message: "Đăng nhập thành công",
+            token,
             data: resultData
         });
 
