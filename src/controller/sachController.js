@@ -224,10 +224,32 @@ const getSachById = async (req, res, next) => {
     }
 }
 
+const getTemplateSach = async (req, res, next) => {
+    try {
+        const book_id = req.params.id;
+        
+        const sach = await SACH.findOne({ MASACH: book_id });
+        if(!sach) {
+            const error = new Error("Không tìm thấy sách");
+            return next(error);
+        }
+        const banSaoSach = await BanSaoSach.find({ MASACH: book_id });
+
+        return res.json({
+            status: 'success',
+            message: 'Lấy thông tin sách thành công',
+            data: banSaoSach
+        });
+    } catch (error) {
+        next(error);
+    }
+}
+
 export default {
     createSach,
     getAllSach,
     uploadBookImage,
     deleteBook,
-    getSachById
+    getSachById,
+    getTemplateSach
 }

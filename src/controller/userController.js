@@ -133,8 +133,23 @@ const getUserById = async (req, res, next) => {
     }
 };
 
+const getAllUsers = async (req, res, next) => {
+    try {
+        
+        const allUsers = await DocGia.find();
+        res.json({
+            status: "success",
+            message: "Lấy danh sách độc giả thành công",
+            data: allUsers
+        });
+    } catch (error) {
+        return next(error);
+    }
+};
+
 export default {
     register,
     login,
-    getUserById
+    getUserById,
+    getAllUsers
 }

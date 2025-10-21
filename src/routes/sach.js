@@ -10,4 +10,7 @@ sachRouter.delete('/admin/delete/:maSach', sachController.deleteBook);
 //========================== BOTH ==========================//
 sachRouter.get('/all', sachController.getAllSach);
 sachRouter.get('/:id', sachController.getSachById);
+sachRouter.get('/template/:id', sachController.getTemplateSach);
+
+
 export default sachRouter;

@@ -18,72 +18,100 @@ const generateMaMuon = async () => {
     return `PM${seqNumber}`;
 };
 
-const createNewMuonSach = async (req, res, next) => {
+const createMuonSachBulk = async (req, res, next) => {
     try {
-        const { MANHANVIEN, MADOCGIA, MA_BANSAO } = req.body;
-        console.log(`Yêu cầu mượn sách từ độc giả ${MADOCGIA} cho bản sao ${MA_BANSAO} bởi nhân viên ${MANHANVIEN}`);
-        //kiểm tra bản sách đã bị mượn chưa
-        const existingMuonSach = await TheoDoiMuonSach.findOne({ MA_BANSAO, TINHTRANG: 'borrowing' });
-        if (existingMuonSach) {
-            const error = new Error('Bản sao sách này đang được mượn và chưa trả.');
-            error.status = 400;
-            return next(error);
-        }
-        //lấy thông tin đọc giả
+        const { MANHANVIEN, MADOCGIA, LIST_MA_BANSAO } = req.body; // LIST_MA_BANSAO: [MA_BANSAO1, MA_BANSAO2, ...]
+        
+        // Lấy thông tin độc giả & gói
         const docGia = await DOCGIA.findOne({ MADOCGIA });
         if (!docGia) {
             const error = new Error('Độc giả không tồn tại');
             error.status = 404;
             return next(error);
         }
-        //lấy thông tin về gói đăng kí
+        
         const packageInfo = await Package.findOne({ MaGoi: docGia.GOI.MaGoi });
         if (!packageInfo) {
-            const error = new Error('Gói đăng ký của độc giả không tồn tại');
+            const error = new Error('Gói dịch vụ không tồn tại');
             error.status = 404;
             return next(error);
         }
-        const sach = await BanSaoSach.findOne({ MA_BANSAO: MA_BANSAO });
-        if (!sach) {
-            const error = new Error('Sách không tồn tại');
+        
+        // Validate: kiểm tra giới hạn mượn
+        const sachMuonHienTai = await TheoDoiMuonSach.countDocuments({ 
+            MADOCGIA, 
+            TINHTRANG: 'borrowing' 
+        });
+        const soSachCanMuon = LIST_MA_BANSAO.length;
+        const tongSachMuon = sachMuonHienTai + soSachCanMuon;
+        
+        if (tongSachMuon > packageInfo.SoSachToiDa) {
+            const error = new Error(
+                `Vượt quá giới hạn mượn. Hiện tại: ${sachMuonHienTai}, muốn thêm: ${soSachCanMuon}, tối đa: ${packageInfo.SoSachToiDa}`
+            );
+            error.status = 400;
+            return next(error);
+        }
+        
+        // Validate: kiểm tra tất cả bản sao có hợp lệ không
+        const banSaoList = await BanSaoSach.find({ MA_BANSAO: { $in: LIST_MA_BANSAO } });
+        if (banSaoList.length !== LIST_MA_BANSAO.length) {
+            const error = new Error('Một số bản sao không tồn tại');
             error.status = 404;
             return next(error);
         }
-        //logic ngày hạn trả dựa trên gói cước
-        const timeLimitOfPackage = packageInfo.ThoiHanMuon; //ngày
+        
+        const sachDangMuon = await TheoDoiMuonSach.find({ 
+            MA_BANSAO: { $in: LIST_MA_BANSAO }, 
+            TINHTRANG: 'borrowing' 
+        });
+        if (sachDangMuon.length > 0) {
+            const error = new Error('Một số sách đang được mượn');
+            error.status = 400;
+            return next(error);
+        }
+        
+        // Xử lý: tạo tất cả phiếu mượn
         const NGAYMUON = new Date();
         const NGAYHANTRA = new Date(NGAYMUON);
-        NGAYHANTRA.setDate(NGAYHANTRA.getDate() + timeLimitOfPackage);
-        const MAPHIEU = await generateMaMuon();
-        const TINHTRANG = 'borrowing';
-        const TRANGTHAISACH = sach.TINHTRANG;
-
-        const newMuonSach = new TheoDoiMuonSach({
-            MAPHIEU,
-            MANHANVIEN,
-            MADOCGIA,
-            MA_BANSAO,
-            NGAYMUON,
-            TINHTRANG,
-            NGAYHANTRA,
-            TRANGTHAISACH
-        });
-
-        await newMuonSach.save();
-        //cập nhật tình trạng sách
-        await BanSaoSach.findOneAndUpdate(
-            { MA_BANSAO },
+        NGAYHANTRA.setDate(NGAYHANTRA.getDate() + packageInfo.ThoiHanMuon);
+        
+        const newMuonSachList = await Promise.all(
+            LIST_MA_BANSAO.map(async (MA_BANSAO) => {
+                const MAPHIEU = await generateMaMuon();
+                const sach = banSaoList.find(s => s.MA_BANSAO === MA_BANSAO);
+                
+                return new TheoDoiMuonSach({
+                    MAPHIEU,
+                    MANHANVIEN,
+                    MADOCGIA,
+                    MA_BANSAO,
+                    NGAYMUON,
+                    TINHTRANG: 'borrowing',
+                    NGAYHANTRA,
+                    TRANGTHAISACH: sach.TINHTRANG
+                });
+            })
+        );
+        
+        await TheoDoiMuonSach.insertMany(newMuonSachList);
+        
+        // Cập nhật tình trạng sách
+        await BanSaoSach.updateMany(
+            { MA_BANSAO: { $in: LIST_MA_BANSAO } },
             { TRANGTHAI: true }
         );
+        
         res.json({
             status: 'success',
-            message: 'Tạo phiếu mượn sách thành công',
-            data: newMuonSach
-        })
+            message: `Mượn ${LIST_MA_BANSAO.length} sách thành công`,
+            data: newMuonSachList
+        });
     } catch (error) {
         next(error);
     }
 };
+
 
 //lấy chi tiết thông tin mượn theo mã phiếu
 const getPhieuMuonChiTiet = async (req, res, next) => {
@@ -172,7 +200,7 @@ const getPhieuMuonChiTiet = async (req, res, next) => {
                 MADOCGIA: docGia.MADOCGIA,
                 HOLOT: docGia.HOLOT,
                 TEN: docGia.TEN,
-                GIOITINH: docGia.GIOITINH,
+                PHAI: docGia.PHAI,
                 NGAYSINH: docGia.NGAYSINH,
                 DIACHI: docGia.DIACHI,
                 DIENTHOAI: docGia.DIENTHOAI
@@ -193,7 +221,7 @@ const getPhieuMuonChiTiet = async (req, res, next) => {
 const getSachMuonTheoMaDocGia = async (req, res, next) => {
     try {
         const { MADOCGIA } = req.params;
-        const sachMuon = await TheoDoiMuonSach.find({ MADOCGIA, TINHTRANG: 'borrowing' });
+        const sachMuon = await TheoDoiMuonSach.find({ MADOCGIA});
         res.json({
             status: 'success',
             message: 'Lấy thông tin sách mượn theo mã độc giả thành công',
@@ -217,9 +245,34 @@ const getAllMuonSach = async (req, res, next) => {
     }
 };
 
+
+const returnBook = async (req, res, next) => {
+    try {
+        const { LIST_MAPHIEU } = req.body;
+        //kiểm tra các mã phiếu có tồn tại không
+        if(!LIST_MAPHIEU || LIST_MAPHIEU.length === 0) {
+            const error = new Error('Danh sách mã phiếu trống');
+            error.status = 400;
+            return next(error);
+        }
+        const NGAYTRA = new Date();
+        await TheoDoiMuonSach.updateMany(
+            { MAPHIEU: { $in: LIST_MAPHIEU } },
+            { $set: { NGAYTRA, TINHTRANG: 'returned' } }
+        );
+        res.json({
+            status: 'success',
+            message: 'Trả sách thành công'
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
 export default {
-    createNewMuonSach,
+    createMuonSachBulk,
     getPhieuMuonChiTiet,
     getSachMuonTheoMaDocGia,
-    getAllMuonSach
+    getAllMuonSach,
+    returnBook
 };
