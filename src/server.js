@@ -12,7 +12,14 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 3000;
 
-app.use(cors());
+// Cấu hình CORS
+const corsOptions = {
+    origin: ['https://lib.hieurury.id.vn', 'http://localhost:5173', 'http://localhost:3000'],
+    credentials: true,
+    optionsSuccessStatus: 200
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
