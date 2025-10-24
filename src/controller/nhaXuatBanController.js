@@ -1,5 +1,5 @@
-import NHAXUATBAN from '../../models/NHAXUATBAN.js';
-import Counter from "../../models/Counter.js"
+import NHAXUATBAN from '../models/NHAXUATBAN.js';
+import Counter from "../models/Counter.js"
 
 const generateMaNXB = async (TENNXB) => {
     const counter = await Counter.findByIdAndUpdate(

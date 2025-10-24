@@ -1,5 +1,5 @@
 import express from 'express';
-import nhanVienController from '../controller/admin/nhanVienController.js';
+import nhanVienController from '../controller/nhanVienController.js';
 
 //init
 const NhanVienRouter = express.Router();

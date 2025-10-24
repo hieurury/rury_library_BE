@@ -1,53 +1,51 @@
-import express from 'express';
-import cors from 'cors';
-import Router from './routes/index.js';
-import connectDB from './config/db.js';
-import path from 'path';
-import multer from 'multer';
-import dotenv from 'dotenv';
+import express      from 'express';
+import cors         from 'cors';
+import Router       from './routes/index.js';
+import connectDB    from './config/db.js';
+import path         from 'path';
+import dotenv       from 'dotenv';
 dotenv.config();
 
 
 
-const app = express();
-const port = process.env.PORT || 3000;
+const app   = express();
+const port  = process.env.PORT || 3000;
 
 // Cấu hình CORS
 const corsOptions = {
-    origin: ['https://lib.hieurury.id.vn', 'http://localhost:5173', 'http://localhost:3000'],
+    origin: ['https://lib.hieurury.id.vn', 'https://adminlib.hieurury.id.vn', 'http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000'],
     credentials: true,
     optionsSuccessStatus: 200
 };
 
-app.use(cors(corsOptions));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+try {
+    app.use(cors(corsOptions));
+    app.use(express.json());
+    app.use(express.urlencoded({ extended: true }));
 
-//public folder
-const __dirname = path.resolve();
-//public folder for image
-app.use('/public', express.static(path.join(__dirname, 'src/public')));
+    //public folder
+    const __dirname = path.resolve();
+    //public folder for image
+    app.use('/public', express.static(path.join(__dirname, 'src/public')));
 
 
 
-//use middleware for routes
-Router(app);
-connectDB();
+    //use middleware for routes
+    Router(app);
+    connectDB();
 
-app.get('/', (req, res) => {
-  return res.json({
-    status: "true",
-    message: "hello hieurury"
-  })
-});
 
-app.listen(port, () => {
-    // console.clear();
-    console.log(`
-SERVER IS RUNNING
-----------------------------
-> ✅ server is started
-visit http://localhost:${port}
-----------------------------
-    `);
-});
+    app.listen(port, () => {
+        console.clear();
+        console.log(`
+    SERVER IS RUNNING
+    ----------------------------
+    > ✅ server is started
+    visit http://localhost:${port}
+    ----------------------------
+        `);
+    });
+    
+} catch (error) {
+    console.error('Error occurred:', error);
+}

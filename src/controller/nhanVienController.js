@@ -1,7 +1,7 @@
 
 //import
-import NhanVien from "../../models/NhanVien.js"
-import Counter from "../../models/Counter.js"
+import NhanVien from "../models/NhanVien.js"
+import Counter from "../models/Counter.js"
 import { configDotenv } from "dotenv";
 configDotenv();
 

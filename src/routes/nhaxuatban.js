@@ -1,5 +1,5 @@
 import express from 'express';
-import nhaXuatBanController from '../controller/admin/nhaXuatBanController.js';
+import nhaXuatBanController from '../controller/nhaXuatBanController.js';
 
 //init
 const NhaXuatBanRouter = express.Router();

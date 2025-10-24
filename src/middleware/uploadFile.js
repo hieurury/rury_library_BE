@@ -22,7 +22,18 @@ const booksStorage = multer.diskStorage({
   }
 });
 
+const packageBadgeStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, 'src/public/imgs/badges');
+  },
+  //tên file là tên gốc
+  filename: function (req, file, cb) {
+    cb(null, file.originalname);
+  }
+});
+
 const uploadCategoriesImage = multer({ storage: categoriesStorage });
 const uploadBooksImage = multer({ storage: booksStorage });
+const uploadPackageBadge = multer({ storage: packageBadgeStorage });
 
-export { uploadCategoriesImage, uploadBooksImage };
+export { uploadCategoriesImage, uploadBooksImage, uploadPackageBadge };

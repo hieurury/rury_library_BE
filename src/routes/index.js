@@ -24,8 +24,8 @@ const Router = (App) => {
     App.use('/user', userRouter);
     App.use('/borrow', TheoDoiMuonSachRouter);
     //admin
-    App.use('/admin/account', NhanVienRouter);
-    App.use('/admin/package', packageRouter);
+    App.use('/account', NhanVienRouter);
+    App.use('/package', packageRouter);
 
     //error
     App.use(notFound);
