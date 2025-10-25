@@ -147,9 +147,41 @@ const getAllUsers = async (req, res, next) => {
     }
 };
 
+//cập nhật gói
+const subscribePackage = async (req, res, next) => {
+    const { MADOCGIA, MaGoi } = req.body;
+    try {
+        const docGia = await DocGia.findOne({ MADOCGIA });
+        if(!docGia) {
+            const error = new Error("Độc giả không tồn tại.");
+            return next(error);
+        }
+        const packages = await Package.findOne({ MaGoi: MaGoi, TrangThai: true });
+        if(!packages) {
+            const error = new Error("Gói đăng kí không tồn tại hoặc đã bị vô hiệu hóa.");
+            return next(error);
+        }
+        const ThoiHanGoi = packages.ThoiHanGoi === -1 ? 1200 : packages.ThoiHanGoi; //nếu gói vô hạn thì cho 100 năm
+        docGia.GOI = {
+            MaGoi: MaGoi,
+            NgayDangKy: new Date(),
+            NgayHetHan: new Date(new Date().setMonth(new Date().getMonth() + ThoiHanGoi)),
+        };
+        await DocGia.updateOne({ MADOCGIA }, { GOI: docGia.GOI });
+        res.json({
+            status: "success",
+            message: "Đăng ký gói thành công",
+            data: docGia
+        });
+    } catch (error) {
+        return next(error);
+    }
+};
+
 export default {
     register,
     login,
     getUserById,
-    getAllUsers
+    getAllUsers,
+    subscribePackage
 }

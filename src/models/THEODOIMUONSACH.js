@@ -13,5 +13,6 @@ const theoDoiMuonSach = new Schema({
     TINHTRANG: { type: String, required: true, enum: ['borrowing', 'returned'] },
 });
 
-const model = mongoose.model("TheoDoiMuonSach", theoDoiMuonSach);
+// Kiểm tra nếu model đã tồn tại thì sử dụng lại, nếu chưa thì tạo mới
+const model = mongoose.models.TheoDoiMuonSach || mongoose.model("TheoDoiMuonSach", theoDoiMuonSach);
 export default model;

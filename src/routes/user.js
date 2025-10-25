@@ -11,7 +11,7 @@ userRouter.post("/register", userController.register);
 userRouter.post("/login", userController.login);
 
 userRouter.get("/admin/all", userController.getAllUsers);
-
+userRouter.put("/admin/subscribe-package", userController.subscribePackage);
 //xác thực hết dưới này
 userRouter.use(authenticateToken);
 //GET

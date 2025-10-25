@@ -12,14 +12,14 @@ const app   = express();
 const port  = process.env.PORT || 3000;
 
 // Cấu hình CORS
-const corsOptions = {
-    origin: ['https://lib.hieurury.id.vn', 'https://adminlib.hieurury.id.vn', 'http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000'],
-    credentials: true,
-    optionsSuccessStatus: 200
-};
+// const corsOptions = {
+//     origin: ['https://lib.hieurury.id.vn', 'https://adminlib.hieurury.id.vn', 'http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000'],
+//     credentials: true,
+//     optionsSuccessStatus: 200
+// };
 
 try {
-    app.use(cors(corsOptions));
+    app.use(cors());
     app.use(express.json());
     app.use(express.urlencoded({ extended: true }));
 

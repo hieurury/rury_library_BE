@@ -3,6 +3,7 @@ import Counter from '../models/Counter.js';
 import BanSaoSach from '../models/BanSaoSach.js';   
 import NHAXUTBAN from '../models/NHAXUATBAN.js';
 import TheLoai from '../models/TheLoai.js';
+import THEODOIMUONSACH from '../models/THEODOIMUONSACH.js';
 
 
 //========================= ADMIN =========================//
@@ -245,11 +246,96 @@ const getTemplateSach = async (req, res, next) => {
     }
 }
 
+const updateBook = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const data = req.body;
+
+        const updatedBook = await SACH.findOneAndUpdate({ MASACH: id }, data, { new: true });
+        if (!updatedBook) {
+            const error = new Error("Không tìm thấy sách");
+            return next(error);
+        }
+
+        res.json({
+            status: "success",
+            message: "Cập nhật sách thành công",
+            data: updatedBook
+        });
+    } catch (error) {
+        next(error);
+    }
+}
+
+//GET: /sach/top-books
+const getTopBooks = async (req, res, next) => {
+    // Tính số lượt mượn của từng sách
+    // Lấy tất cả phiếu mượn -> tìm bản sao -> tìm sách -> đếm số lượt mượn
+    try {
+        // Lấy tất cả phiếu mượn
+        const allBorrowRecords = await THEODOIMUONSACH.find();
+        
+        // Đếm số lượt mượn theo mã sách
+        const bookBorrowCount = {};
+        
+        for (const record of allBorrowRecords) {
+            // Tìm bản sao sách
+            const banSao = await BanSaoSach.findOne({ MA_BANSAO: record.MA_BANSAO });
+            
+            if (banSao) {
+                const maSach = banSao.MASACH;
+                bookBorrowCount[maSach] = (bookBorrowCount[maSach] || 0) + 1;
+            }
+        }
+        
+        // Sắp xếp và lấy top 6 sách có nhiều lượt mượn nhất
+        const topBookIds = Object.keys(bookBorrowCount)
+            .sort((a, b) => bookBorrowCount[b] - bookBorrowCount[a])
+            .slice(0, 6);
+        
+        // Lấy thông tin chi tiết sách
+        const topBooks = await SACH.find({ MASACH: { $in: topBookIds } });
+        
+        // Populate thông tin NXB và thể loại cho mỗi sách
+        const result = await Promise.all(topBooks.map(async (sach) => {
+            const nxb = await NHAXUTBAN.findOne({ MANXB: sach.MAXB });
+            const theloai = await TheLoai.find({ MaLoai: { $in: sach.THELOAI } });
+            
+            return {
+                MASACH: sach.MASACH,
+                TENSACH: sach.TENSACH,
+                MOTA: sach.MOTA,
+                DONGIA: sach.DONGIA,
+                SOQUYEN: sach.SOQUYEN,
+                NAMXUATBAN: sach.NAMXUATBAN,
+                MAXB: nxb,
+                TACGIA: sach.TACGIA,
+                HINHANH: sach.HINHANH,
+                THELOAI: theloai,
+                BorrowCount: bookBorrowCount[sach.MASACH] || 0
+            };
+        }));
+        
+        // Sắp xếp lại theo số lượt mượn giảm dần
+        result.sort((a, b) => b.BorrowCount - a.BorrowCount);
+        
+        res.json({
+            status: "success",
+            message: "Lấy danh sách sách hàng đầu thành công",
+            data: result
+        });
+    } catch (error) {
+        next(error);
+    }
+}
+
 export default {
     createSach,
     getAllSach,
     uploadBookImage,
     deleteBook,
+    updateBook,
     getSachById,
-    getTemplateSach
+    getTemplateSach,
+    getTopBooks
 }
