@@ -5,6 +5,44 @@ import NHAXUTBAN from '../models/NHAXUATBAN.js';
 import TheLoai from '../models/TheLoai.js';
 import THEODOIMUONSACH from '../models/THEODOIMUONSACH.js';
 
+// API: Lấy danh sách bản sao available của một sách
+const getAvailableCopies = async (req, res, next) => {
+    try {
+        const { MASACH } = req.params;
+        
+        // Kiểm tra sách có tồn tại không
+        const sach = await SACH.findOne({ MASACH });
+        if (!sach) {
+            const error = new Error('Sách không tồn tại');
+            error.status = 404;
+            return next(error);
+        }
+        
+        // Lấy tất cả bản sao available (TRANGTHAI = false)
+        const availableCopies = await BanSaoSach.find({
+            MASACH,
+            TRANGTHAI: false // Chưa được mượn
+        }).sort({ TINHTRANG: -1 }); // Ưu tiên 'new' trước 'old'
+        
+        res.json({
+            status: 'success',
+            message: 'Lấy danh sách bản sao thành công',
+            data: {
+                MASACH,
+                TENSACH: sach.TENSACH,
+                totalAvailable: availableCopies.length,
+                copies: availableCopies.map(copy => ({
+                    MA_BANSAO: copy.MA_BANSAO,
+                    TINHTRANG: copy.TINHTRANG,
+                    GHICHU: copy.GHICHU
+                }))
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
 
 //========================= ADMIN =========================//
 //create ma sach
@@ -149,7 +187,7 @@ const uploadBookImage = async (req, res, next) => {
         }
         //nếu có file thì trả về đường dẫn
         //replace \\ thành /
-        const customPath = req.file.path.replace(/\\/g, '/').replace('src/', '');
+        const customPath = req.file.path.replace(/\\/g, '/').replace('src/', '/');
         
         res.json({
             status: "success",
@@ -337,5 +375,6 @@ export default {
     updateBook,
     getSachById,
     getTemplateSach,
-    getTopBooks
+    getTopBooks,
+    getAvailableCopies
 }

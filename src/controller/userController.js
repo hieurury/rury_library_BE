@@ -1,6 +1,7 @@
 import DocGia   from "../models/DOCGIA.js";
 import Counter  from "../models/Counter.js";
 import Package  from "../models/Package.js";
+import TheoDoiMuonSach from "../models/THEODOIMUONSACH.js";
 import jwt      from "jsonwebtoken";
 import dotenv   from "dotenv";
 dotenv.config();
@@ -115,12 +116,15 @@ const getUserById = async (req, res, next) => {
             MADOCGIA: docGia.MADOCGIA,
             HOLOT: docGia.HOLOT,
             TEN: docGia.TEN,
+            AVATAR: docGia.AVATAR,
             DIENTHOAI: docGia.DIENTHOAI,
             EMAIL: docGia.EMAIL,
             PHAI: docGia.PHAI,
             DIACHI: docGia.DIACHI,
             NGAYSINH: docGia.NGAYSINH,
-            GOI: goi
+            GOI: goi,
+            FAVORITES: docGia.FAVORITES || [],
+            OPTIONS: docGia.OPTIONS || { EMAIL_NOTIF: true }
         }
         res.json({
             status: "success",
@@ -178,10 +182,94 @@ const subscribePackage = async (req, res, next) => {
     }
 };
 
+//thêm sách yêu thích
+const addFavorite = async (req, res, next) => {
+    const { MADOCGIA, MASACH } = req.body;
+    try {
+        const docGia = await DocGia.findOne({ MADOCGIA });
+        if(!docGia) {
+            const error = new Error("Độc giả không tồn tại.");
+            return next(error);
+        }
+        
+        // Kiểm tra sách đã tồn tại trong favorites chưa
+        const existingFavorite = docGia.FAVORITES.find(fav => fav.MASACH === MASACH);
+        if(existingFavorite) {
+            return res.json({
+                status: "success",
+                message: "Sách đã có trong danh sách yêu thích"
+            });
+        }
+        
+        // Thêm sách vào favorites
+        docGia.FAVORITES.push({
+            MASACH: MASACH,
+            NGAYTHEMSACH: new Date()
+        });
+        
+        await docGia.save();
+        
+        res.json({
+            status: "success",
+            message: "Đã thêm vào danh sách yêu thích",
+            data: docGia.FAVORITES
+        });
+    } catch (error) {
+        return next(error);
+    }
+};
+
+//xóa sách yêu thích
+const removeFavorite = async (req, res, next) => {
+    const { MADOCGIA, MASACH } = req.body;
+    try {
+        const docGia = await DocGia.findOne({ MADOCGIA });
+        if(!docGia) {
+            const error = new Error("Độc giả không tồn tại.");
+            return next(error);
+        }
+        
+        // Xóa sách khỏi favorites
+        docGia.FAVORITES = docGia.FAVORITES.filter(fav => fav.MASACH !== MASACH);
+        
+        await docGia.save();
+        
+        res.json({
+            status: "success",
+            message: "Đã xóa khỏi danh sách yêu thích",
+            data: docGia.FAVORITES
+        });
+    } catch (error) {
+        return next(error);
+    }
+};
+
+//đếm số sách đang mượn (TINHTRANG = 'borrowing')
+const getBorrowingCount = async (req, res, next) => {
+    const { id } = req.params;
+    try {
+        const count = await TheoDoiMuonSach.countDocuments({ 
+            MADOCGIA: id, 
+            TINHTRANG: 'borrowing' 
+        });
+        
+        res.json({
+            status: "success",
+            message: "Lấy số sách đang mượn thành công",
+            data: { count }
+        });
+    } catch (error) {
+        return next(error);
+    }
+};
+
 export default {
     register,
     login,
     getUserById,
     getAllUsers,
-    subscribePackage
+    subscribePackage,
+    addFavorite,
+    removeFavorite,
+    getBorrowingCount
 }

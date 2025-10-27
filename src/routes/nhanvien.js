@@ -5,9 +5,9 @@ import nhanVienController from '../controller/nhanVienController.js';
 const NhanVienRouter = express.Router();
 
 //set routes
-NhanVienRouter.post('/create', nhanVienController.createNhanVien);
-NhanVienRouter.post('/create-admin', nhanVienController.createAdmin);
-NhanVienRouter.post('/login', nhanVienController.accountLogin);
+NhanVienRouter.post('/admin/create', nhanVienController.createNhanVien);
+NhanVienRouter.post('/admin/create-admin', nhanVienController.createAdmin);
+NhanVienRouter.post('/admin/login', nhanVienController.accountLogin);
 
 
 //export

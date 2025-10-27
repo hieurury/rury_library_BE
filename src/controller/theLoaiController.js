@@ -78,7 +78,7 @@ const uploadCategoryIcon = async (req, res, next) => {
         }
         
         //replace \\ thành /
-        const customPath = req.file.path.replace(/\\/g, '/').replace('src/', '');
+        const customPath = req.file.path.replace(/\\/g, '/').replace('src/', '/');
         res.json({
             status: "success",
             message: "Tải lên hình ảnh thể loại thành công",
@@ -143,9 +143,72 @@ const getTopCategories = async (req, res, next) => {
     }
 }
 
+//PUT: /the-loai/update/:maLoai
+const updateTheLoai = async (req, res, next) => {
+    try {
+        const { maLoai } = req.params;
+        const data = req.body;
+        
+        const category = await TheLoai.findOne({ MaLoai: maLoai });
+        if (!category) {
+            const error = new Error("Không tìm thấy thể loại");
+            return next(error);
+        }
+        
+        // Cập nhật thông tin
+        category.TenLoai = data.TenLoai || category.TenLoai;
+        category.MoTa = data.MoTa || category.MoTa;
+        category.Icon = data.Icon || category.Icon;
+        category.Color = data.Color || category.Color;
+        
+        const updatedCategory = await category.save();
+        
+        res.json({
+            status: "success",
+            message: "Cập nhật thể loại thành công",
+            data: updatedCategory
+        });
+    } catch (error) {
+        next(error);
+    }
+}
+
+//DELETE: /the-loai/delete/:maLoai
+const deleteTheLoai = async (req, res, next) => {
+    try {
+        const { maLoai } = req.params;
+        
+        // Kiểm tra xem thể loại có tồn tại không
+        const category = await TheLoai.findOne({ MaLoai: maLoai });
+        if (!category) {
+            const error = new Error("Không tìm thấy thể loại");
+            return next(error);
+        }
+        
+        // Kiểm tra xem có sách nào đang sử dụng thể loại này không
+        const books = await SACH.find({ THELOAI: maLoai });
+        if (books.length > 0) {
+            const error = new Error("Không thể xóa thể loại này vì có sách đang sử dụng");
+            return next(error);
+        }
+        
+        // Xóa thể loại
+        await TheLoai.deleteOne({ MaLoai: maLoai });
+        
+        res.json({
+            status: "success",
+            message: "Xóa thể loại thành công"
+        });
+    } catch (error) {
+        next(error);
+    }
+}
+
 export default {
     createTheLoai,
     uploadCategoryIcon,
     getAllCategories,
-    getTopCategories
+    getTopCategories,
+    updateTheLoai,
+    deleteTheLoai
 };

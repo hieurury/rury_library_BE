@@ -16,4 +16,8 @@ userRouter.put("/admin/subscribe-package", userController.subscribePackage);
 userRouter.use(authenticateToken);
 //GET
 userRouter.get("/get/:id", userController.getUserById);
+userRouter.get("/borrowing-count/:id", userController.getBorrowingCount);
+//POST
+userRouter.post("/favorites/add", userController.addFavorite);
+userRouter.post("/favorites/remove", userController.removeFavorite);
 export default userRouter;

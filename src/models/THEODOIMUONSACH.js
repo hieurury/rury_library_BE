@@ -8,6 +8,7 @@ const theoDoiMuonSach = new Schema({
     MA_BANSAO: { type: String, required: true },
     NGAYMUON: { type: Date, required: true },
     NGAYHANTRA: { type: Date, required: true },
+    GIA: { type: Number, required: true },
     NGAYTRA: { type: Date, required: false },
     TRANGTHAISACH: { type: String, required: true },
     TINHTRANG: { type: String, required: true, enum: ['borrowing', 'returned'] },

@@ -3,6 +3,7 @@ import TheLoaiRouter            from './theloai.js';
 import sachRouter               from './sach.js';
 import userRouter               from './user.js';
 import TheoDoiMuonSachRouter    from './theodoimuonsach.js';
+import billRouter               from './bill.js';
 //admin
 import NhanVienRouter           from './nhanvien.js';
 import NhaXuatBanRouter         from './nhaxuatban.js';
@@ -23,6 +24,7 @@ const Router = (App) => {
     App.use('/nha-xuat-ban', NhaXuatBanRouter);
     App.use('/user', userRouter);
     App.use('/borrow', TheoDoiMuonSachRouter);
+    App.use('/bill', billRouter);
     //admin
     App.use('/account', NhanVienRouter);
     App.use('/package', packageRouter);

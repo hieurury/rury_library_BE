@@ -8,6 +8,15 @@ const GOI = new Schema({
     NgayHetHan: { type: Date, required: true },
 })
 
+const FAVORITE = new Schema({
+    MASACH: { type: String, required: true },
+    NGAYTHEMSACH: { type: Date, required: true, default: Date.now },
+})
+
+const OPTIONS = new Schema({
+    EMAIL_NOTIF: { type: Boolean, default: true },
+});
+
 const DOCGIA = new Schema({
     MADOCGIA: { type: String, required: true, unique: true },
     HOLOT: { type: String },
@@ -20,6 +29,8 @@ const DOCGIA = new Schema({
     EMAIL: { type: String, required: false, unique: true },
     PASSWORD: { type: String, required: true },
     GOI: { type: GOI, required: true },
+    FAVORITES: { type: [FAVORITE], default: [] },
+    OPTIONS: { type: OPTIONS, default: {} },
 })
 
 const model = mongoose.model('DOCGIA', DOCGIA);

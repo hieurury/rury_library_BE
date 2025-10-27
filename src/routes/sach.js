@@ -11,6 +11,7 @@ sachRouter.put('/admin/update/:id', sachController.updateBook);
 //========================== BOTH ==========================//
 sachRouter.get('/all', sachController.getAllSach);
 sachRouter.get('/top-books', sachController.getTopBooks);
+sachRouter.get('/copies/:MASACH', sachController.getAvailableCopies);
 sachRouter.get('/:id', sachController.getSachById);
 sachRouter.get('/template/:id', sachController.getTemplateSach);
 
