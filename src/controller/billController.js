@@ -168,7 +168,8 @@ const createBill = async (req, res, next) => {
                       req.socket.remoteAddress ||
                       '127.0.0.1';
         
-        const orderInfo = `Thanh toan muon sach ${MABILL}`;
+        // VNPay KHÔNG hỗ trợ tiếng Việt có dấu trong orderInfo
+        const orderInfo = `Book borrowing payment ${MABILL}`;
         const paymentUrl = generatePaymentUrl(
             MABILL,
             tongTien,

@@ -2,11 +2,24 @@ import crypto from 'crypto';
 import querystring from 'querystring';
 
 // VNPay Configuration
-const VNP_TMN_CODE = '7USBLE68';
-const VNP_HASH_SECRET = 'IWAB74AZO8LFB7U9H10OZCCRDPG2ZDMM';
-const VNP_URL = 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html';
-// VNPay sẽ redirect về server route này để xử lý kết quả thanh toán
-const VNP_RETURN_URL = process.env.VNPAY_RETURN_URL || 'http://localhost:3000/bill/vnpay/return';
+const VNP_TMN_CODE = process.env.VNP_TMN_CODE;
+const VNP_HASH_SECRET = process.env.VNP_HASH_SECRET;
+const VNP_URL = process.env.VNP_URL || 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html';
+const VNP_RETURN_URL = process.env.VNPAY_RETURN_URL;
+
+// Validate required environment variables
+if (!VNP_TMN_CODE || !VNP_HASH_SECRET || !VNP_RETURN_URL) {
+    console.error('❌ Missing VNPay configuration:');
+    console.error('- VNP_TMN_CODE:', VNP_TMN_CODE ? '✅' : '❌');
+    console.error('- VNP_HASH_SECRET:', VNP_HASH_SECRET ? '✅' : '❌');
+    console.error('- VNP_RETURN_URL:', VNP_RETURN_URL ? '✅' : '❌');
+    throw new Error('VNPay configuration is incomplete. Please check .env file');
+}
+
+console.log('✅ VNPay Configuration Loaded:');
+console.log('- TMN Code:', VNP_TMN_CODE);
+console.log('- Return URL:', VNP_RETURN_URL);
+console.log('- VNPay URL:', VNP_URL);
 
 /**
  * Sắp xếp object theo thứ tự alphabet
@@ -51,7 +64,7 @@ export const generatePaymentUrl = (billId, amount, orderInfo, ipAddr) => {
             vnp_Locale: 'vn',
             vnp_CurrCode: 'VND',
             vnp_TxnRef: billId,
-            vnp_OrderInfo: orderInfo || `Thanh toan don hang ${billId}`,
+            vnp_OrderInfo: orderInfo || `Payment for bill ${billId}`,
             vnp_OrderType: 'other',
             vnp_Amount: amount * 100, // VNPay yêu cầu số tiền x 100
             vnp_ReturnUrl: VNP_RETURN_URL,
@@ -63,17 +76,32 @@ export const generatePaymentUrl = (billId, amount, orderInfo, ipAddr) => {
         // Sắp xếp params theo alphabet
         const sortedParams = sortObject(vnpParams);
 
-        // Tạo query string
+        // Tạo query string cho việc tạo chữ ký (KHÔNG encode)
         const signData = querystring.stringify(sortedParams, { encode: false });
+        
+        console.log('📝 Sign Data (before hash):', signData);
 
         // Tạo secure hash
         const secureHash = createSignature(signData, VNP_HASH_SECRET);
+        
+        console.log('🔐 Secure Hash:', secureHash);
 
         // Thêm secure hash vào params
         sortedParams.vnp_SecureHash = secureHash;
 
-        // Tạo URL cuối cùng
-        const paymentUrl = VNP_URL + '?' + querystring.stringify(sortedParams, { encode: false });
+        // Tạo URL cuối cùng (CÓ encode để đảm bảo URL hợp lệ)
+        const paymentUrl = VNP_URL + '?' + querystring.stringify(sortedParams, { encode: true });
+
+        console.log('🔗 VNPay Payment URL Generated:');
+        console.log('- Bill ID:', billId);
+        console.log('- Amount:', amount, 'VND');
+        console.log('- VNPay Amount:', amount * 100);
+        console.log('- Order Info:', orderInfo);
+        console.log('- Return URL:', VNP_RETURN_URL);
+        console.log('- Create Date:', vnpParams.vnp_CreateDate);
+        console.log('- Expire Date:', vnpParams.vnp_ExpireDate);
+        console.log('- Payment URL length:', paymentUrl.length);
+        console.log('- Full URL:', paymentUrl.substring(0, 200) + '...');
 
         return paymentUrl;
     } catch (error) {
