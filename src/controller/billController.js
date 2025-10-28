@@ -497,7 +497,7 @@ const cleanupExpiredBills = async () => {
     }
 };
 
-export {
+export default {
     createBill,
     getBillById,
     getBillsByDocGia,
