@@ -48,7 +48,17 @@ const BILL = new Schema({
     PENDING_BOOKS: [{
         type: String,
         required: false
-    }] // Lưu tạm danh sách MA_BANSAO khi chờ thanh toán VNPAY (chỉ dùng cho online payment)
+    }], // Lưu tạm danh sách MA_BANSAO khi chờ thanh toán VNPAY (chỉ dùng cho online payment)
+    METADATA: {
+        type: Object,
+        required: false,
+        default: {}
+        // Format:
+        // {
+        //     packageInfo: { ThoiHanMuon: Number },
+        //     expiresAt: Date  // Thời điểm hết hạn bill (24h cho CASH, 15min cho VNPAY)
+        // }
+    }
 }, {
     timestamps: true
 });

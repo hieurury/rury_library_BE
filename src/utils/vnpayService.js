@@ -5,7 +5,8 @@ import querystring from 'querystring';
 const VNP_TMN_CODE = '7USBLE68';
 const VNP_HASH_SECRET = 'IWAB74AZO8LFB7U9H10OZCCRDPG2ZDMM';
 const VNP_URL = 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html';
-const VNP_RETURN_URL = process.env.VNPAY_RETURN_URL || 'http://localhost:5173/vnpay/return';
+// VNPay sẽ redirect về server route này để xử lý kết quả thanh toán
+const VNP_RETURN_URL = process.env.VNPAY_RETURN_URL || 'http://localhost:3000/bill/vnpay/return';
 
 /**
  * Sắp xếp object theo thứ tự alphabet

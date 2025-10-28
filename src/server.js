@@ -4,6 +4,7 @@ import Router       from './routes/index.js';
 import connectDB    from './config/db.js';
 import path         from 'path';
 import dotenv       from 'dotenv';
+import './jobs/billCleanup.js'; // Cleanup job cho bills hết hạn
 dotenv.config();
 
 
