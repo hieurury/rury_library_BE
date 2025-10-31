@@ -5,12 +5,12 @@ import billController from '../controller/billController.js';
 const billRouter = express.Router();
 
 // VNPay return URL - KHÔNG cần authentication (VNPay gọi trực tiếp)
-billRouter.get('/vnpay/return', billController.vnpayReturn);
 
 // Tất cả routes khác đều cần authentication
 billRouter.use(authenticateToken);
 
 // POST - Tạo bill mới
+billRouter.post('/checkBill', billController.checkBillThanhToan);
 billRouter.post('/create', billController.createBill);
 
 // GET - Lấy bill theo mã

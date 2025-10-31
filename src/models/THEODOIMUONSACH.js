@@ -11,7 +11,7 @@ const theoDoiMuonSach = new Schema({
     GIA: { type: Number, required: true },
     NGAYTRA: { type: Date, required: false },
     TRANGTHAISACH: { type: String, required: true },
-    TINHTRANG: { type: String, required: true, enum: ['borrowing', 'returned'] },
+    TINHTRANG: { type: String, required: true, enum: ['borrowing', 'returned', 'waiting'] },
 });
 
 // Kiểm tra nếu model đã tồn tại thì sử dụng lại, nếu chưa thì tạo mới

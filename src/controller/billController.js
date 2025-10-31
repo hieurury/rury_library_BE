@@ -27,16 +27,23 @@ const generateMaPhieu = async () => {
     return `PM${seqNumber}`;
 };
 
-// ================================================
-// LOGIC MỚI - ĐƠN GIẢN HÓA
-// ================================================
+const generateMaGD = async () => {
+    const counter = await Counter.findOneAndUpdate(
+        { _id: 'maGiaoDich' },
+        { $inc: { seq: 1 } },
+        { new: true, upsert: true }
+    );
+    const seqNumber = counter.seq.toString().padStart(6, '0');
+    return `GD${seqNumber}`;
+};
+
 // NGUYÊN TẮC:
 // 1. VNPAY (online): KHÔNG tạo gì cho đến khi SUCCESS callback
 // 2. CASH: CHỈ dùng cho thủ thư tạo trực tiếp tại quầy
 //          Web client KHÔNG được phép tạo bill CASH
 // ================================================
 
-const createBill = async (req, res, next) => {
+const checkBillThanhToan = async (req, res, next) => {
     try {
         const { MADOCGIA, LIST_MA_BANSAO, LOAITHANHTOAN } = req.body;
         
@@ -128,70 +135,45 @@ const createBill = async (req, res, next) => {
             tongTien += sach.DONGIA || 0;
         }
         
-        // Tạo MABILL
-        const MABILL = await generateMaBill();
-        
-        // ============================================
-        // CHỈ VNPAY - TẠO BILL PENDING
-        // ============================================
-        // KHÔNG tạo phiếu mượn, KHÔNG lock sách
-        // Chỉ tạo phiếu + lock sách khi callback SUCCESS
-        
-        const newBill = new BILL({
-            MABILL,
-            MADOCGIA,
-            DANHSACHPHIEU: [], // Trống, sẽ được tạo khi VNPAY success
-            TONGTIEN: tongTien,
-            TRANGTHAI: false, // Chưa thanh toán
-            LOAITHANHTOAN: 'online',
-            NGAYLAP: new Date(),
-            PENDING_BOOKS: LIST_MA_BANSAO, // Lưu tạm để tạo phiếu sau khi thanh toán thành công
-            METADATA: {
-                packageInfo: {
-                    ThoiHanMuon: packageInfo.ThoiHanMuon
-                },
-                expiresAt: new Date(Date.now() + 15 * 60 * 1000) // 15 phút (timeout VNPAY)
-            }
-        });
-        
-        await newBill.save();
-        
-        // SOFT LOCK: Đánh dấu các bản sao đang chờ thanh toán
-        await BanSaoSach.updateMany(
-            { MA_BANSAO: { $in: LIST_MA_BANSAO } },
-            { PENDING_BILL: MABILL }
-        );
+        const maGD = await generateMaGD();
         
         // Tạo URL thanh toán VNPay
-        const ipAddr = req.headers['x-forwarded-for'] || 
-                      req.connection.remoteAddress || 
-                      req.socket.remoteAddress ||
-                      '127.0.0.1';
+        let ipAddr = req.headers['x-forwarded-for'] || 
+                     req.connection.remoteAddress || 
+                     req.socket.remoteAddress ||
+                     '127.0.0.1';
+        
+        // VNPay chỉ hỗ trợ IPv4, chuyển IPv6 về IPv4
+        if (ipAddr && ipAddr.includes('::')) {
+            // IPv6 localhost → IPv4 localhost
+            if (ipAddr === '::1' || ipAddr.startsWith('::ffff:')) {
+                ipAddr = ipAddr.replace('::ffff:', '');
+            } else {
+                ipAddr = '127.0.0.1';
+            }
+        }
+        
+        // Lấy IP đầu tiên nếu có nhiều (x-forwarded-for)
+        if (ipAddr && ipAddr.includes(',')) {
+            ipAddr = ipAddr.split(',')[0].trim();
+        }
+        
+        console.log('🌐 Client IP:', ipAddr);
         
         // VNPay KHÔNG hỗ trợ tiếng Việt có dấu trong orderInfo
-        const orderInfo = `Book borrowing payment ${MABILL}`;
+        const orderInfo = `Thanh ${tongTien} VND cho giao dich - GDID: ${maGD}`;
         const paymentUrl = generatePaymentUrl(
-            MABILL,
+            maGD,
             tongTien,
             orderInfo,
             ipAddr
         );
         
         res.json({
-                status: 'pending',
-                message: 'Bill đã tạo. Vui lòng thanh toán qua VNPAY trong vòng 15 phút',
-                data: {
-                    bill: {
-                        MABILL: newBill.MABILL,
-                    TONGTIEN: newBill.TONGTIEN,
-                    NGAYLAP: newBill.NGAYLAP,
-                    SO_SACH: LIST_MA_BANSAO.length
-                },
-                requirePayment: true,
-                paymentUrl: paymentUrl,
-                expiresIn: '15 phút',
-                warning: 'Bill sẽ tự động hủy nếu không thanh toán trong 15 phút. Sách chưa được lock.'
-            }
+            requirePayment: true,
+            paymentUrl: paymentUrl,
+            expiresIn: '15 phút',
+            warning: 'Bill sẽ tự động hủy nếu không thanh toán trong 15 phút. Sách chưa được lock.'
         });
         
     } catch (error) {
@@ -199,192 +181,119 @@ const createBill = async (req, res, next) => {
     }
 };
 
-// VNPay Return URL Handler (cho redirect từ VNPay về website)
-const vnpayReturn = async (req, res, next) => {
+const createBill = async (req, res, next) => {
     try {
-        const vnpParams = req.query;
-        
-        // Verify chữ ký
-        const verifyResult = verifyReturnUrl(vnpParams);
-        
-        if (!verifyResult.isValid) {
-            return res.redirect(`${process.env.CLIENT_URL || 'http://localhost:5173'}/vnpay/return?status=error&message=${encodeURIComponent('Chữ ký không hợp lệ')}`);
+        const { MADOCGIA, LIST_MA_BANSAO, LOAITHANHTOAN } = req.body;
+        console.log(MADOCGIA, LIST_MA_BANSAO, LOAITHANHTOAN);
+        if(!MADOCGIA || !LIST_MA_BANSAO || LIST_MA_BANSAO.length === 0 || !LOAITHANHTOAN) {
+            const error = new Error('Thông tin thanh toán không hợp lệ!');
+            error.status = 400;
+            return next(error);
         }
-        
-        const { responseCode, billId, transactionNo } = verifyResult;
-        
-        if (responseCode === '00') {
-            // ========== THANH TOÁN THÀNH CÔNG ==========
-            const bill = await BILL.findOne({ MABILL: billId });
-            
-            if (!bill) {
-                console.error(`Bill ${billId} không tồn tại`);
-                return res.redirect(`${process.env.CLIENT_URL || 'http://localhost:5173'}/vnpay/return?status=error&message=${encodeURIComponent('Bill không tồn tại')}`);
-            }
-            
-            // Nếu đã thanh toán rồi thì chỉ redirect success
-            if (bill.TRANGTHAI === true) {
-                return res.redirect(`${process.env.CLIENT_URL || 'http://localhost:5173'}/vnpay/return?status=success&billId=${billId}`);
-            }
-            
-            // TẠO PHIẾU MƯỢN VÀ LOCK SÁCH
-            try {
-                const result = await createBorrowingRecordsFromBill(bill, 'vnpay_system');
-                
-                // Cập nhật bill
-                bill.TRANGTHAI = true;
-                bill.NGAYTHANHTOAN = new Date();
-                bill.VNPAY_TRANSACTION_ID = transactionNo;
-                bill.DANHSACHPHIEU = result.danhSachPhieu;
-                bill.PENDING_BOOKS = []; // Clear pending
-                await bill.save();
-                
-                // CLEAR SOFT LOCK: Xóa PENDING_BILL khi thanh toán thành công
-                await BanSaoSach.updateMany(
-                    { PENDING_BILL: billId },
-                    { PENDING_BILL: null }
-                );
-                
-                console.log(`✅ VNPAY SUCCESS: Bill ${billId} đã thanh toán, phiếu mượn đã tạo`);
-                return res.redirect(`${process.env.CLIENT_URL || 'http://localhost:5173'}/vnpay/return?status=success&billId=${billId}`);
-                
-            } catch (error) {
-                console.error(`❌ Error creating borrowing records for bill ${billId}:`, error);
-                
-                // ROLLBACK: Xóa bill và clear soft lock nếu không tạo được phiếu mượn
-                await BILL.deleteOne({ MABILL: billId });
-                await BanSaoSach.updateMany(
-                    { PENDING_BILL: billId },
-                    { PENDING_BILL: null }
-                );
-                console.log(`🗑️  Bill ${billId} đã bị xóa do lỗi tạo phiếu mượn`);
-                
-                return res.redirect(`${process.env.CLIENT_URL || 'http://localhost:5173'}/vnpay/return?status=error&message=${encodeURIComponent('Lỗi xử lý phiếu mượn. Bill đã bị hủy.')}`);
-            }
-            
-        } else {
-            // ========== THANH TOÁN THẤT BẠI ==========
-            // XÓA BILL NGAY LẬP TỨC VÀ CLEAR SOFT LOCK
-            const deleteResult = await BILL.deleteOne({ MABILL: billId });
-            
-            if (deleteResult.deletedCount > 0) {
-                // Clear soft lock cho các sách
-                await BanSaoSach.updateMany(
-                    { PENDING_BILL: billId },
-                    { PENDING_BILL: null }
-                );
-                console.log(`🗑️  VNPAY FAILED: Bill ${billId} đã bị xóa (response code: ${responseCode})`);
-            }
-            
-            return res.redirect(`${process.env.CLIENT_URL || 'http://localhost:5173'}/vnpay/return?status=failed&message=${encodeURIComponent(verifyResult.message || 'Thanh toán không thành công')}`);
+        //kiểm tra và lấy thông tin độc giả + gói
+        const docGia = await DOCGIA.findOne({ MADOCGIA });
+        if (!docGia) {
+            const error = new Error('Độc giả không tồn tại');
+            error.status = 404;
+            return next(error);
         }
-    } catch (error) {
-        console.error('❌ VNPay return error:', error);
-        return res.redirect(`${process.env.CLIENT_URL || 'http://localhost:5173'}/vnpay/return?status=error&message=${encodeURIComponent('Lỗi hệ thống')}`);
-    }
-};
+        const packageInfo = await Package.findOne({ MaGoi: docGia.GOI.MaGoi });
+        if (!packageInfo) {
+            const error = new Error('Gói dịch vụ không tồn tại');
+            error.status = 404;
+            return next(error);
+        }
+        //validate và lấy thông tin bản sao
+        let tongTien = 0;
+        for (const MA_BANSAO of LIST_MA_BANSAO) {
+            const banSao = await BanSaoSach.findOne({ MA_BANSAO });
+            if (!banSao) {
+                const error = new Error(`Bản sao ${MA_BANSAO} không tồn tại`);
+                error.status = 404;
+                return next(error);
+            }  
+            const sach = await SACH.findOne({ MASACH: banSao.MASACH });
+            if (!sach) {
+                const error = new Error(`Sách ${banSao.MASACH} không tồn tại`); 
+                error.status = 404;
+                return next(error);
+            }
+            if(banSao.TRANGTHAI === true) {
+                const error = new Error(`Có lỗi xảy ra trong quá trình xử lí mượn sách`);
+                error.status = 400;
+                return next(error);
+            }
+            tongTien += sach.DONGIA || 0;
+        }
 
-// Helper function: Tạo phiếu mượn từ bill
-// Dùng cho cả CASH confirm và VNPAY callback
-const createBorrowingRecordsFromBill = async (bill, manhanvien = 'system') => {
-    if (!bill.PENDING_BOOKS || bill.PENDING_BOOKS.length === 0) {
-        throw new Error('Bill không có sách pending');
-    }
-    
-    const MADOCGIA = bill.MADOCGIA;
-    const LIST_MA_BANSAO = bill.PENDING_BOOKS;
-    
-    // Lấy thông tin gói
-    const docGia = await DOCGIA.findOne({ MADOCGIA });
-    if (!docGia) {
-        throw new Error('Độc giả không tồn tại');
-    }
-    
-    const packageInfo = await Package.findOne({ MaGoi: docGia.GOI.MaGoi });
-    if (!packageInfo) {
-        throw new Error('Gói dịch vụ không tồn tại');
-    }
-    
-    // Validate và lấy thông tin bản sao
-    const banSaoList = [];
-    const sachList = [];
-    
-    for (const MA_BANSAO of LIST_MA_BANSAO) {
-        const banSao = await BanSaoSach.findOne({ MA_BANSAO });
-        
-        if (!banSao) {
-            throw new Error(`Bản sao ${MA_BANSAO} không tồn tại`);
-        }
-        
-        // HARD LOCK: Sách đã được mượn (có phiếu mượn)
-        if (banSao.TRANGTHAI === true) {
-            throw new Error(`Bản sao ${MA_BANSAO} đã được mượn bởi người khác. Vui lòng chọn bản sao khác.`);
-        }
-        
-        // SOFT LOCK: Sách đang chờ thanh toán của đơn khác
-        // (Cho phép nếu là cùng bill hiện tại)
-        if (banSao.PENDING_BILL && banSao.PENDING_BILL !== bill.MABILL) {
-            throw new Error(`Bản sao ${MA_BANSAO} đang được giữ chỗ bởi đơn khác. Vui lòng chọn bản sao khác.`);
-        }
-        
-        const sach = await SACH.findOne({ MASACH: banSao.MASACH });
-        if (!sach) {
-            throw new Error(`Sách ${banSao.MASACH} không tồn tại`);
-        }
-        
-        banSaoList.push(banSao);
-        sachList.push(sach);
-    }
-    
-    // Tạo phiếu mượn
-    const NGAYMUON = new Date();
-    const NGAYHANTRA = new Date(NGAYMUON);
-    NGAYHANTRA.setDate(NGAYHANTRA.getDate() + packageInfo.ThoiHanMuon);
-    
-    const danhSachPhieu = [];
-    const phieuMuonList = [];
-    
-    for (let i = 0; i < banSaoList.length; i++) {
-        const MAPHIEU = await generateMaPhieu();
-        const banSao = banSaoList[i];
-        const sach = sachList[i];
-        
-        const phieuMuon = new TheoDoiMuonSach({
-            MAPHIEU,
-            MANHANVIEN: manhanvien,
-            MADOCGIA,
-            MA_BANSAO: banSao.MA_BANSAO,
-            NGAYMUON,
-            NGAYHANTRA,
-            GIA: sach.DONGIA || 0,
-            TRANGTHAISACH: banSao.TINHTRANG,
-            TINHTRANG: 'borrowing'
+
+        //tạo phiếu mượn cho tất cả bản sao ở trạng thái waiting
+        // Tạo phiếu mượn cho tất cả bản sao ở trạng thái waiting
+        const phieuMuonPromises = LIST_MA_BANSAO.map(async (MA_BANSAO) => {
+            const MAPHIEU = await generateMaPhieu();
+            const NGAYMUON = new Date();
+            const NGAYHANTRA = new Date();
+            // Ngày hạn trả tính theo gói
+            NGAYHANTRA.setDate(NGAYHANTRA.getDate() + packageInfo.ThoiHanMuon);
+            
+            // Tìm giá sách
+            const banSao = await BanSaoSach.findOne({ MA_BANSAO });
+            const sach = await SACH.findOne({ MASACH: banSao.MASACH });
+            
+            // Tạo phiếu mượn
+            const phieuMuon = new TheoDoiMuonSach({
+                MAPHIEU,
+                MADOCGIA,
+                MA_BANSAO,
+                NGAYMUON,
+                NGAYHANTRA,
+                GIA: sach.DONGIA || 0,
+                TRANGTHAISACH: banSao.TINHTRANG,
+                TINHTRANG: 'waiting'
+            });
+            
+            // Lock sách (hard lock)
+            await BanSaoSach.findOneAndUpdate(
+                { MA_BANSAO },
+                { TRANGTHAI: true }
+            );
+            
+            // Lưu phiếu mượn
+            await phieuMuon.save();
+            
+            console.log('✅ Created phiếu mượn:', MAPHIEU);
+            
+            return MAPHIEU;
         });
-        
-        phieuMuonList.push(phieuMuon);
-        danhSachPhieu.push(MAPHIEU);
+
+        // Chờ tất cả phiếu mượn được tạo xong
+        const DANHSACHPHIEU = await Promise.all(phieuMuonPromises);
+
+        console.log('📋 Danh sách phiếu:', DANHSACHPHIEU);
+
+        const MABILL = await generateMaBill();
+        //tạo bill mới
+        const newBill = new BILL({
+            MABILL,
+            MADOCGIA,
+            DANHSACHPHIEU,
+            TONGTIEN: tongTien,
+            TRANGTHAI: true,
+            LOAITHANHTOAN,
+            GOI: docGia.GOI.MaGoi
+        });
+        console.log(newBill);
+        await newBill.save();
+
+        res.json({
+            status: 'success',
+            message: 'Tạo bill thành công',
+            data: newBill
+        });
+    } catch (error) {
+        next(error);
     }
-    
-    // ATOMIC: Lưu phiếu mượn + Lock sách cùng lúc
-    await TheoDoiMuonSach.insertMany(phieuMuonList);
-    
-    const maBanSaoList = banSaoList.map(bs => bs.MA_BANSAO);
-    await BanSaoSach.updateMany(
-        { MA_BANSAO: { $in: maBanSaoList } },
-        { TRANGTHAI: true }
-    );
-    
-    return {
-        danhSachPhieu,
-        phieuMuonList: phieuMuonList.map(p => ({
-            MAPHIEU: p.MAPHIEU,
-            MA_BANSAO: p.MA_BANSAO,
-            GIA: p.GIA,
-            NGAYMUON: p.NGAYMUON,
-            NGAYHANTRA: p.NGAYHANTRA
-        }))
-    };
-};
+}
 
 // Lấy thông tin bill theo mã
 const getBillById = async (req, res, next) => {
@@ -500,8 +409,8 @@ const cleanupExpiredBills = async () => {
 
 export default {
     createBill,
+    checkBillThanhToan,
     getBillById,
     getBillsByDocGia,
-    vnpayReturn,
     cleanupExpiredBills
 };

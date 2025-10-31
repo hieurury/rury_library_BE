@@ -24,13 +24,6 @@ const BANSAOSACH = new Schema({
     GHICHU: {
         type: String
     },
-    // SOFT LOCK: Lưu MABILL đang chờ thanh toán (chưa confirm)
-    // Tránh 2 user cùng chọn 1 sách trong lúc 1 user đang chờ thanh toán
-    PENDING_BILL: {
-        type: String,
-        default: null,
-        index: true
-    }
 });
 
 const model = mongoose.model("BANSAOSACH", BANSAOSACH);
