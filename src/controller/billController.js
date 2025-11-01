@@ -278,7 +278,7 @@ const createBill = async (req, res, next) => {
             MADOCGIA,
             DANHSACHPHIEU,
             TONGTIEN: tongTien,
-            TRANGTHAI: true,
+            TRANGTHAI: LOAITHANHTOAN === 'cash' ? false : true,
             LOAITHANHTOAN,
             GOI: docGia.GOI.MaGoi
         });
