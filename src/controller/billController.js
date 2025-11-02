@@ -158,9 +158,6 @@ const checkBillThanhToan = async (req, res, next) => {
             ipAddr = ipAddr.split(',')[0].trim();
         }
         
-        console.log('🌐 Client IP:', ipAddr);
-        
-        // VNPay KHÔNG hỗ trợ tiếng Việt có dấu trong orderInfo
         const orderInfo = `Thanh ${tongTien} VND cho giao dich - GDID: ${maGD}`;
         const paymentUrl = generatePaymentUrl(
             maGD,
@@ -184,26 +181,27 @@ const checkBillThanhToan = async (req, res, next) => {
 const createBill = async (req, res, next) => {
     try {
         const { MADOCGIA, LIST_MA_BANSAO, LOAITHANHTOAN } = req.body;
-        console.log(MADOCGIA, LIST_MA_BANSAO, LOAITHANHTOAN);
+        
         if(!MADOCGIA || !LIST_MA_BANSAO || LIST_MA_BANSAO.length === 0 || !LOAITHANHTOAN) {
             const error = new Error('Thông tin thanh toán không hợp lệ!');
             error.status = 400;
             return next(error);
         }
-        //kiểm tra và lấy thông tin độc giả + gói
+        
         const docGia = await DOCGIA.findOne({ MADOCGIA });
         if (!docGia) {
             const error = new Error('Độc giả không tồn tại');
             error.status = 404;
             return next(error);
         }
+        
         const packageInfo = await Package.findOne({ MaGoi: docGia.GOI.MaGoi });
         if (!packageInfo) {
             const error = new Error('Gói dịch vụ không tồn tại');
             error.status = 404;
             return next(error);
         }
-        //validate và lấy thông tin bản sao
+        
         let tongTien = 0;
         for (const MA_BANSAO of LIST_MA_BANSAO) {
             const banSao = await BanSaoSach.findOne({ MA_BANSAO });
@@ -226,21 +224,15 @@ const createBill = async (req, res, next) => {
             tongTien += sach.DONGIA || 0;
         }
 
-
-        //tạo phiếu mượn cho tất cả bản sao ở trạng thái waiting
-        // Tạo phiếu mượn cho tất cả bản sao ở trạng thái waiting
         const phieuMuonPromises = LIST_MA_BANSAO.map(async (MA_BANSAO) => {
             const MAPHIEU = await generateMaPhieu();
             const NGAYMUON = new Date();
             const NGAYHANTRA = new Date();
-            // Ngày hạn trả tính theo gói
             NGAYHANTRA.setDate(NGAYHANTRA.getDate() + packageInfo.ThoiHanMuon);
             
-            // Tìm giá sách
             const banSao = await BanSaoSach.findOne({ MA_BANSAO });
             const sach = await SACH.findOne({ MASACH: banSao.MASACH });
             
-            // Tạo phiếu mượn
             const phieuMuon = new TheoDoiMuonSach({
                 MAPHIEU,
                 MADOCGIA,
@@ -252,27 +244,19 @@ const createBill = async (req, res, next) => {
                 TINHTRANG: 'waiting'
             });
             
-            // Lock sách (hard lock)
             await BanSaoSach.findOneAndUpdate(
                 { MA_BANSAO },
                 { TRANGTHAI: true }
             );
             
-            // Lưu phiếu mượn
             await phieuMuon.save();
-            
-            console.log('✅ Created phiếu mượn:', MAPHIEU);
             
             return MAPHIEU;
         });
 
-        // Chờ tất cả phiếu mượn được tạo xong
         const DANHSACHPHIEU = await Promise.all(phieuMuonPromises);
-
-        console.log('📋 Danh sách phiếu:', DANHSACHPHIEU);
-
         const MABILL = await generateMaBill();
-        //tạo bill mới
+        
         const newBill = new BILL({
             MABILL,
             MADOCGIA,
@@ -282,7 +266,7 @@ const createBill = async (req, res, next) => {
             LOAITHANHTOAN,
             GOI: docGia.GOI.MaGoi
         });
-        console.log(newBill);
+        
         await newBill.save();
 
         res.json({
@@ -367,7 +351,145 @@ const getBillsByDocGia = async (req, res, next) => {
     }
 };
 
-// Lấy danh sách bills chờ xác nhận (CASH, chưa thanh toán, chưa hết hạn)
+// Lấy danh sách bills chờ lấy sách (có phiếu waiting hoặc chưa thanh toán)
+const getPendingPickupBills = async (req, res, next) => {
+    try {
+        const allBills = await BILL.find({
+            $or: [
+                { TRANGTHAI: false },
+                { DANHSACHPHIEU: { $exists: true, $ne: [] } }
+            ]
+        }).sort({ NGAYLAP: -1 });
+        
+        const pendingBills = [];
+        
+        for (const bill of allBills) {
+            if (bill.DANHSACHPHIEU && bill.DANHSACHPHIEU.length > 0) {
+                const phieuWaiting = await TheoDoiMuonSach.find({
+                    MAPHIEU: { $in: bill.DANHSACHPHIEU },
+                    TINHTRANG: 'waiting'
+                });
+                
+                if (phieuWaiting.length > 0) {
+                    const docGia = await DOCGIA.findOne({ MADOCGIA: bill.MADOCGIA });
+                    
+                    const phieuDetails = await Promise.all(
+                        phieuWaiting.map(async (phieu) => {
+                            const banSao = await BanSaoSach.findOne({ MA_BANSAO: phieu.MA_BANSAO });
+                            const sach = banSao ? await SACH.findOne({ MASACH: banSao.MASACH }) : null;
+                            
+                            return {
+                                MAPHIEU: phieu.MAPHIEU,
+                                MA_BANSAO: phieu.MA_BANSAO,
+                                NGAYMUON: phieu.NGAYMUON,
+                                NGAYHANTRA: phieu.NGAYHANTRA,
+                                GIA: phieu.GIA,
+                                TINHTRANG: phieu.TINHTRANG,
+                                SACH: sach ? {
+                                    MASACH: sach.MASACH,
+                                    TENSACH: sach.TENSACH,
+                                    TACGIA: sach.TACGIA,
+                                    HINHANH: sach.HINHANH
+                                } : null
+                            };
+                        })
+                    );
+                    
+                    pendingBills.push({
+                        ...bill.toObject(),
+                        DOCGIA: docGia ? {
+                            MADOCGIA: docGia.MADOCGIA,
+                            HOLOT: docGia.HOLOT,
+                            TEN: docGia.TEN,
+                            DIENTHOAI: docGia.DIENTHOAI
+                        } : null,
+                        PHIEUWAITING: phieuDetails
+                    });
+                }
+            }
+        }
+        
+        res.json({
+            status: 'success',
+            message: 'Lấy danh sách bills chờ lấy sách thành công',
+            data: pendingBills
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// Xác nhận lấy sách (cập nhật phiếu từ waiting -> borrowing)
+const confirmPickup = async (req, res, next) => {
+    try {
+        const { MABILL, LIST_MAPHIEU, confirmPayment } = req.body;
+        
+        if (!MABILL || !LIST_MAPHIEU || LIST_MAPHIEU.length === 0) {
+            const error = new Error('Thông tin không hợp lệ');
+            error.status = 400;
+            return next(error);
+        }
+        
+        // Lấy thông tin bill
+        const bill = await BILL.findOne({ MABILL });
+        if (!bill) {
+            const error = new Error('Bill không tồn tại');
+            error.status = 404;
+            return next(error);
+        }
+        
+        // Kiểm tra các phiếu có thuộc bill này không
+        const invalidPhieu = LIST_MAPHIEU.filter(mp => !bill.DANHSACHPHIEU.includes(mp));
+        if (invalidPhieu.length > 0) {
+            const error = new Error('Một số phiếu không thuộc bill này');
+            error.status = 400;
+            return next(error);
+        }
+        
+        // Kiểm tra các phiếu có đang ở trạng thái waiting không
+        const phieuList = await TheoDoiMuonSach.find({
+            MAPHIEU: { $in: LIST_MAPHIEU }
+        });
+        
+        const notWaitingPhieu = phieuList.filter(p => p.TINHTRANG !== 'waiting');
+        if (notWaitingPhieu.length > 0) {
+            const error = new Error('Một số phiếu không ở trạng thái chờ lấy sách');
+            error.status = 400;
+            return next(error);
+        }
+        
+        // Nếu là cash và chưa thanh toán, yêu cầu xác nhận thanh toán
+        if (bill.LOAITHANHTOAN === 'cash' && bill.TRANGTHAI === false) {
+            if (!confirmPayment) {
+                const error = new Error('Vui lòng xác nhận đọc giả đã thanh toán');
+                error.status = 400;
+                return next(error);
+            }
+            
+            // Cập nhật trạng thái bill
+            bill.TRANGTHAI = true;
+            bill.NGAYTHANHTOAN = new Date();
+            await bill.save();
+        }
+        
+        // Cập nhật các phiếu từ waiting -> borrowing
+        await TheoDoiMuonSach.updateMany(
+            { MAPHIEU: { $in: LIST_MAPHIEU } },
+            { $set: { TINHTRANG: 'borrowing' } }
+        );
+        
+        res.json({
+            status: 'success',
+            message: 'Xác nhận lấy sách thành công',
+            data: {
+                MABILL: bill.MABILL,
+                updatedPhieu: LIST_MAPHIEU.length
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+};
 
 // Cleanup job: Xóa bills hết hạn (chạy định kỳ)
 const cleanupExpiredBills = async () => {
@@ -412,5 +534,7 @@ export default {
     checkBillThanhToan,
     getBillById,
     getBillsByDocGia,
+    getPendingPickupBills,
+    confirmPickup,
     cleanupExpiredBills
 };

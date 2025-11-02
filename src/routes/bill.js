@@ -6,7 +6,11 @@ const billRouter = express.Router();
 
 // VNPay return URL - KHÔNG cần authentication (VNPay gọi trực tiếp)
 
-// Tất cả routes khác đều cần authentication
+// Routes ADMIN - KHÔNG cần JWT (cho thủ thư sử dụng)
+billRouter.get('/admin/pending-pickup', billController.getPendingPickupBills);
+billRouter.post('/admin/confirm-pickup', billController.confirmPickup);
+
+// Tất cả routes khác đều cần authentication (cho client web)
 billRouter.use(authenticateToken);
 
 // POST - Tạo bill mới
