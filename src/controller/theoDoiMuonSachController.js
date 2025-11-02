@@ -4,7 +4,7 @@ import NhanVien         from '../models/NhanVien.js';
 import BanSaoSach       from '../models/BanSaoSach.js';
 import Package          from '../models/Package.js';
 import Counter          from '../models/Counter.js';
-import TheoDoiMuonSach  from '../models/TheoDoiMuonSach.js';
+import TheoDoiMuonSach  from '../models/THEODOIMUONSACH.js';
 import NHAXUATBAN       from '../models/NHAXUATBAN.js';
 import TheLoai          from '../models/TheLoai.js';
 
@@ -248,21 +248,101 @@ const getAllMuonSach = async (req, res, next) => {
 
 const returnBook = async (req, res, next) => {
     try {
-        const { LIST_MAPHIEU } = req.body;
-        //kiểm tra các mã phiếu có tồn tại không
+        const { LIST_MAPHIEU, LIST_LOST_BOOKS } = req.body;
+        
         if(!LIST_MAPHIEU || LIST_MAPHIEU.length === 0) {
             const error = new Error('Danh sách mã phiếu trống');
             error.status = 400;
             return next(error);
         }
+        
+        const phieuMuonList = await TheoDoiMuonSach.find({ 
+            MAPHIEU: { $in: LIST_MAPHIEU } 
+        });
+        
+        if(phieuMuonList.length === 0) {
+            const error = new Error('Không tìm thấy phiếu mượn');
+            error.status = 404;
+            return next(error);
+        }
+        
         const NGAYTRA = new Date();
+        const MADOCGIA = phieuMuonList[0].MADOCGIA;
+        
+        let tongPhiTre = 0;
+        let tongPhiMat = 0;
+        const violations = [];
+        
+        for (const phieu of phieuMuonList) {
+            const isLost = LIST_LOST_BOOKS && LIST_LOST_BOOKS.includes(phieu.MAPHIEU);
+            const ngayHanTra = new Date(phieu.NGAYHANTRA);
+            const soNgayTre = Math.max(0, Math.ceil((NGAYTRA - ngayHanTra) / (1000 * 60 * 60 * 24)));
+            
+            if (isLost) {
+                tongPhiMat += phieu.GIA * 20;
+                violations.push({
+                    LOAI: 'lost_book',
+                    NGAYVIPHAM: NGAYTRA,
+                    MAPHIEU: phieu.MAPHIEU,
+                    MA_BANSAO: phieu.MA_BANSAO
+                });
+                
+                await BanSaoSach.findOneAndUpdate(
+                    { MA_BANSAO: phieu.MA_BANSAO },
+                    { TINHTRANG: 'lost', TRANGTHAI: false }
+                );
+            } else {
+                if (soNgayTre > 0) {
+                    tongPhiTre += phieu.GIA * 1.5 * soNgayTre;
+                    violations.push({
+                        LOAI: 'delay',
+                        NGAYVIPHAM: NGAYTRA,
+                        MAPHIEU: phieu.MAPHIEU,
+                        SONGAYTRE: soNgayTre
+                    });
+                }
+                
+                await BanSaoSach.findOneAndUpdate(
+                    { MA_BANSAO: phieu.MA_BANSAO },
+                    { TRANGTHAI: false }
+                );
+            }
+        }
+        
         await TheoDoiMuonSach.updateMany(
             { MAPHIEU: { $in: LIST_MAPHIEU } },
             { $set: { NGAYTRA, TINHTRANG: 'returned' } }
         );
+        
+        if (violations.length > 0) {
+            const docGia = await DOCGIA.findOne({ MADOCGIA });
+            if (docGia) {
+                docGia.CACVIPHAM.push(...violations);
+                
+                const soViPham = docGia.CACVIPHAM.length;
+                
+                if (soViPham % 9 === 0) {
+                    docGia.TRANGTHAI = false;
+                } else if (soViPham % 3 === 0) {
+                    const ngayMoKhoa = new Date();
+                    ngayMoKhoa.setDate(ngayMoKhoa.getDate() + 7);
+                    docGia.NGAYMOKHOA = ngayMoKhoa;
+                    docGia.TRANGTHAI = false;
+                }
+                
+                await docGia.save();
+            }
+        }
+        
         res.json({
             status: 'success',
-            message: 'Trả sách thành công'
+            message: 'Trả sách thành công',
+            data: {
+                tongPhiTre,
+                tongPhiMat,
+                tongPhi: tongPhiTre + tongPhiMat,
+                soViPham: violations.length
+            }
         });
     } catch (error) {
         next(error);

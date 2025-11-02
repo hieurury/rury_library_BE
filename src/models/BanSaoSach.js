@@ -19,7 +19,7 @@ const BANSAOSACH = new Schema({
     TINHTRANG: {
         type: String,
         default: "new",
-        enum: ["new", "old"]
+        enum: ["new", "old", "lost"]
     },
     GHICHU: {
         type: String
