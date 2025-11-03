@@ -56,13 +56,6 @@ const checkBillThanhToan = async (req, res, next) => {
             return next(error);
         }
         
-        // Web client CHỈ được phép dùng VNPAY (online)
-        if (LOAITHANHTOAN !== 'online') {
-            const error = new Error('Chỉ hỗ trợ thanh toán VNPAY (online) qua web');
-            error.status = 400;
-            return next(error);
-        }
-        
         // Lấy thông tin độc giả và gói
         const docGia = await DOCGIA.findOne({ MADOCGIA });
         if (!docGia) {
@@ -167,7 +160,7 @@ const checkBillThanhToan = async (req, res, next) => {
             orderInfo,
             ipAddr
         );
-        
+        console.log(paymentUrl);
         res.json({
             requirePayment: true,
             paymentUrl: paymentUrl,
@@ -183,7 +176,7 @@ const checkBillThanhToan = async (req, res, next) => {
 const createBill = async (req, res, next) => {
     try {
         const { MADOCGIA, LIST_MA_BANSAO, LOAITHANHTOAN } = req.body;
-        
+        console.log(MADOCGIA, LIST_MA_BANSAO, LOAITHANHTOAN);
         if(!MADOCGIA || !LIST_MA_BANSAO || LIST_MA_BANSAO.length === 0 || !LOAITHANHTOAN) {
             const error = new Error('Thông tin thanh toán không hợp lệ!');
             error.status = 400;
@@ -269,7 +262,10 @@ const createBill = async (req, res, next) => {
             GOI: docGia.GOI.MaGoi
         });
         
-        await newBill.save();
+        const savedBill = await newBill.save();
+        if(savedBill) {
+            console.log(`đã tạo một bill ${savedBill.MABILL} ${LOAITHANHTOAN} cho ${MADOCGIA}`);
+        }
 
         // Tạo thông báo cho độc giả
         await notifyBorrowSuccess(

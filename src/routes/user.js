@@ -25,5 +25,7 @@ userRouter.post("/favorites/remove", userController.removeFavorite);
 userRouter.put("/settings/email-notification", userController.updateEmailNotification);
 userRouter.put("/notifications/mark-read", userController.markNotificationAsRead);
 userRouter.put("/notifications/mark-all-read", userController.markAllNotificationsAsRead);
+//DELETE
+userRouter.delete("/notifications/delete-all", userController.deleteAllNotifications);
 
 export default userRouter;

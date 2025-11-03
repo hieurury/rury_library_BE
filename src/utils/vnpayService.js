@@ -8,18 +8,8 @@ const VNP_RETURN_URL = process.env.VNPAY_RETURN_URL?.trim();
 
 // === Validate configuration ===
 if (!VNP_TMN_CODE || !VNP_HASH_SECRET || !VNP_RETURN_URL) {
-    console.error('❌ Missing VNPay configuration');
-    console.error('- VNP_TMN_CODE:', VNP_TMN_CODE ? '✅' : '❌');
-    console.error('- VNP_HASH_SECRET:', VNP_HASH_SECRET ? '✅' : '❌');
-    console.error('- VNP_RETURN_URL:', VNP_RETURN_URL ? '✅' : '❌');
     throw new Error('VNPay configuration incomplete. Please check your .env file');
 }
-
-console.log('✅ VNPay Configuration Loaded:');
-console.log('- TMN Code:', VNP_TMN_CODE);
-console.log('- Return URL:', VNP_RETURN_URL);
-console.log('- VNPay URL:', VNP_URL);
-console.log('- Hash Secret (first 10 chars):', VNP_HASH_SECRET.substring(0, 10) + '...');
 
 // === Helpers ===
 const formatDateVNPay = (date) => {
@@ -101,22 +91,15 @@ export const generatePaymentUrl = (billId, amount, orderInfo, ipAddr) => {
         // Tạo signData để hash (không encode vì sortObject đã encode)
         const signData = buildQueryString(sortedParams);
         
-        console.log('📝 Sign Data for hashing:');
-        console.log(signData);
-
         // Hash với HMAC SHA512
         const secureHash = createSignature(signData);
         
-        console.log('🔐 Generated Hash:', secureHash);
-
         // Thêm hash vào params
         sortedParams.vnp_SecureHash = secureHash;
         
         // Build URL cuối cùng (sortObject đã encode, chỉ cần nối lại)
         const paymentUrl = `${VNP_URL}?${buildQueryString(sortedParams)}`;
 
-        console.log('\n🔗 Final Payment URL:');
-        console.log(paymentUrl);
         return paymentUrl;
     } catch (err) {
         console.error('❌ Error generating VNPay URL:', err);
@@ -127,8 +110,6 @@ export const generatePaymentUrl = (billId, amount, orderInfo, ipAddr) => {
 // === Verify return URL / IPN ===
 export const verifyReturnUrl = (vnpParams) => {
     try {
-        console.log('🔍 Verifying VNPay return...');
-        
         const secureHash = vnpParams.vnp_SecureHash;
         const clone = { ...vnpParams };
         delete clone.vnp_SecureHash;
@@ -138,17 +119,9 @@ export const verifyReturnUrl = (vnpParams) => {
         const sortedClone = sortObject(clone);
         const signData = buildQueryString(sortedClone);
         
-        console.log('📝 Sign Data for verification:');
-        console.log(signData);
-        
         const checkHash = createSignature(signData);
         
-        console.log('🔐 Calculated Hash:', checkHash);
-        console.log('🔐 Received Hash:', secureHash);
-
         const isValid = secureHash === checkHash;
-        
-        console.log(isValid ? '✅ Signature VALID' : '❌ Signature INVALID');
         
         return {
             isValid,

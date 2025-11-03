@@ -400,6 +400,31 @@ const markAllNotificationsAsRead = async (req, res, next) => {
     }
 };
 
+// Xóa tất cả thông báo
+const deleteAllNotifications = async (req, res, next) => {
+    try {
+        const { MADOCGIA } = req.user; // Từ JWT
+        
+        const docGia = await DocGia.findOne({ MADOCGIA });
+        if (!docGia) {
+            const error = new Error('Độc giả không tồn tại');
+            error.status = 404;
+            return next(error);
+        }
+        
+        // Xóa tất cả thông báo
+        docGia.NOTIFICATIONS = [];
+        await docGia.save();
+        
+        res.json({
+            status: 'success',
+            message: 'Đã xóa tất cả thông báo'
+        });
+    } catch (error) {
+        return next(error);
+    }
+};
+
 export default {
     register,
     login,
@@ -412,5 +437,6 @@ export default {
     updateEmailNotification,
     getNotifications,
     markNotificationAsRead,
-    markAllNotificationsAsRead
+    markAllNotificationsAsRead,
+    deleteAllNotifications
 }
