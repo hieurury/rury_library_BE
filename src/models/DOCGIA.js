@@ -17,9 +17,17 @@ const OPTIONS = new Schema({
     EMAIL_NOTIF: { type: Boolean, default: true },
 });
 
+const NOTIFICATION = new Schema({
+    LABEL: { type: String, required: true },
+    NOIDUNG: { type: String, required: true },
+    NGAYTAO: { type: Date, required: true, default: Date.now },
+    DAXEM: { type: Boolean, required: true, default: false },
+})
+
 const VIPHAM = new Schema({
     LOAI: { type: String, required: true, enum: ['delay', 'lost_book'] },
     NGAYVIPHAM: { type: Date, required: true, default: Date.now },
+    TIENPHAT: { type: Number, required: true },
 })
 
 const DOCGIA = new Schema({
@@ -38,7 +46,8 @@ const DOCGIA = new Schema({
     OPTIONS: { type: OPTIONS, default: {} },
     CACVIPHAM: { type: [VIPHAM], default: [] },
     TRANGTHAI: { type: Boolean, required: true, default: true },
-    NGAYMOKHOA: { type: Date, required: false }
+    NGAYMOKHOA: { type: Date, required: false },
+    NOTIFICATIONS: { type: [NOTIFICATION], default: [] }
 })
 
 const model = mongoose.model('DOCGIA', DOCGIA);

@@ -17,7 +17,13 @@ userRouter.use(authenticateToken);
 //GET
 userRouter.get("/get/:id", userController.getUserById);
 userRouter.get("/borrowing-count/:id", userController.getBorrowingCount);
+userRouter.get("/notifications", userController.getNotifications);
 //POST
 userRouter.post("/favorites/add", userController.addFavorite);
 userRouter.post("/favorites/remove", userController.removeFavorite);
+//PUT
+userRouter.put("/settings/email-notification", userController.updateEmailNotification);
+userRouter.put("/notifications/mark-read", userController.markNotificationAsRead);
+userRouter.put("/notifications/mark-all-read", userController.markAllNotificationsAsRead);
+
 export default userRouter;

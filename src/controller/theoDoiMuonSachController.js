@@ -7,6 +7,12 @@ import Counter          from '../models/Counter.js';
 import TheoDoiMuonSach  from '../models/THEODOIMUONSACH.js';
 import NHAXUATBAN       from '../models/NHAXUATBAN.js';
 import TheLoai          from '../models/TheLoai.js';
+import { 
+    notifyReturnSuccess, 
+    notifyAccountLocked, 
+    notifyAccountPermanentlyLocked 
+} from '../utils/notificationHelper.js';
+import { sendReturnNotification } from '../utils/emailService.js';
 
 const generateMaMuon = async () => {
     const counter = await Counter.findOneAndUpdate(
@@ -323,15 +329,35 @@ const returnBook = async (req, res, next) => {
                 
                 if (soViPham % 9 === 0) {
                     docGia.TRANGTHAI = false;
+                    await notifyAccountPermanentlyLocked(MADOCGIA, soViPham);
                 } else if (soViPham % 3 === 0) {
                     const ngayMoKhoa = new Date();
                     ngayMoKhoa.setDate(ngayMoKhoa.getDate() + 7);
                     docGia.NGAYMOKHOA = ngayMoKhoa;
                     docGia.TRANGTHAI = false;
+                    await notifyAccountLocked(MADOCGIA, soViPham, ngayMoKhoa);
                 }
                 
                 await docGia.save();
             }
+        }
+        
+        // Thông báo trả sách thành công
+        await notifyReturnSuccess(
+            MADOCGIA,
+            LIST_MAPHIEU.length,
+            tongPhiTre + tongPhiMat
+        );
+        
+        // Gửi email thông báo (nếu user bật)
+        const docGia = await DOCGIA.findOne({ MADOCGIA });
+        if (docGia && docGia.EMAIL) {
+            await sendReturnNotification(
+                MADOCGIA,
+                docGia.EMAIL,
+                LIST_MAPHIEU.length,
+                tongPhiTre + tongPhiMat
+            );
         }
         
         res.json({

@@ -26,6 +26,7 @@ const BILL = new Schema({
         required: true,
         default: false // false: chưa thanh toán, true: đã thanh toán
     },
+    BIHUY: { type: Boolean, default: false }, // bị huỷ do quá hạn thanh toán
     LOAITHANHTOAN: {
         type: String,
         required: true,

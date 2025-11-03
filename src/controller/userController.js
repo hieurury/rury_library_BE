@@ -263,6 +263,143 @@ const getBorrowingCount = async (req, res, next) => {
     }
 };
 
+// Cập nhật cài đặt email notification
+const updateEmailNotification = async (req, res, next) => {
+    try {
+        const { MADOCGIA } = req.user; // Từ JWT
+        const { EMAIL_NOTIF } = req.body;
+        
+        if (typeof EMAIL_NOTIF !== 'boolean') {
+            const error = new Error('EMAIL_NOTIF phải là boolean');
+            error.status = 400;
+            return next(error);
+        }
+        
+        const docGia = await DocGia.findOne({ MADOCGIA });
+        if (!docGia) {
+            const error = new Error('Độc giả không tồn tại');
+            error.status = 404;
+            return next(error);
+        }
+        
+        // Cập nhật cài đặt
+        if (!docGia.OPTIONS) {
+            docGia.OPTIONS = {};
+        }
+        docGia.OPTIONS.EMAIL_NOTIF = EMAIL_NOTIF;
+        await docGia.save();
+        
+        res.json({
+            status: 'success',
+            message: `Đã ${EMAIL_NOTIF ? 'bật' : 'tắt'} thông báo email`,
+            data: {
+                EMAIL_NOTIF: docGia.OPTIONS.EMAIL_NOTIF
+            }
+        });
+    } catch (error) {
+        return next(error);
+    }
+};
+
+// Lấy danh sách thông báo của user
+const getNotifications = async (req, res, next) => {
+    try {
+        const { MADOCGIA } = req.user; // Từ JWT
+        
+        const docGia = await DocGia.findOne({ MADOCGIA });
+        if (!docGia) {
+            const error = new Error('Độc giả không tồn tại');
+            error.status = 404;
+            return next(error);
+        }
+        
+        // Lấy notifications, sắp xếp theo ngày tạo mới nhất
+        const notifications = (docGia.NOTIFICATIONS || [])
+            .sort((a, b) => new Date(b.NGAYTAO) - new Date(a.NGAYTAO));
+        
+        // Đếm số thông báo chưa đọc
+        const unreadCount = notifications.filter(n => !n.DAXEM).length;
+        
+        res.json({
+            status: 'success',
+            message: 'Lấy thông báo thành công',
+            data: {
+                notifications,
+                unreadCount
+            }
+        });
+    } catch (error) {
+        return next(error);
+    }
+};
+
+// Đánh dấu thông báo đã đọc
+const markNotificationAsRead = async (req, res, next) => {
+    try {
+        const { MADOCGIA } = req.user; // Từ JWT
+        const { notificationId } = req.body;
+        
+        if (!notificationId) {
+            const error = new Error('notificationId không hợp lệ');
+            error.status = 400;
+            return next(error);
+        }
+        
+        const docGia = await DocGia.findOne({ MADOCGIA });
+        if (!docGia) {
+            const error = new Error('Độc giả không tồn tại');
+            error.status = 404;
+            return next(error);
+        }
+        
+        // Tìm và cập nhật thông báo
+        const notification = docGia.NOTIFICATIONS.id(notificationId);
+        if (!notification) {
+            const error = new Error('Thông báo không tồn tại');
+            error.status = 404;
+            return next(error);
+        }
+        
+        notification.DAXEM = true;
+        await docGia.save();
+        
+        res.json({
+            status: 'success',
+            message: 'Đã đánh dấu thông báo đã đọc',
+            data: notification
+        });
+    } catch (error) {
+        return next(error);
+    }
+};
+
+// Đánh dấu tất cả thông báo đã đọc
+const markAllNotificationsAsRead = async (req, res, next) => {
+    try {
+        const { MADOCGIA } = req.user; // Từ JWT
+        
+        const docGia = await DocGia.findOne({ MADOCGIA });
+        if (!docGia) {
+            const error = new Error('Độc giả không tồn tại');
+            error.status = 404;
+            return next(error);
+        }
+        
+        // Đánh dấu tất cả thông báo đã đọc
+        docGia.NOTIFICATIONS.forEach(notification => {
+            notification.DAXEM = true;
+        });
+        await docGia.save();
+        
+        res.json({
+            status: 'success',
+            message: 'Đã đánh dấu tất cả thông báo đã đọc'
+        });
+    } catch (error) {
+        return next(error);
+    }
+};
+
 export default {
     register,
     login,
@@ -271,5 +408,9 @@ export default {
     subscribePackage,
     addFavorite,
     removeFavorite,
-    getBorrowingCount
+    getBorrowingCount,
+    updateEmailNotification,
+    getNotifications,
+    markNotificationAsRead,
+    markAllNotificationsAsRead
 }

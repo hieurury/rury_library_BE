@@ -6,6 +6,8 @@ import BanSaoSach from '../models/BanSaoSach.js';
 import SACH from '../models/SACH.js';
 import Counter from '../models/Counter.js';
 import { generatePaymentUrl, verifyReturnUrl } from '../utils/vnpayService.js';
+import { notifyBorrowSuccess, notifyPickupSuccess, notifyRefund } from '../utils/notificationHelper.js';
+import { sendBorrowNotification } from '../utils/emailService.js';
 
 const generateMaBill = async () => {
     const counter = await Counter.findOneAndUpdate(
@@ -269,6 +271,25 @@ const createBill = async (req, res, next) => {
         
         await newBill.save();
 
+        // Tạo thông báo cho độc giả
+        await notifyBorrowSuccess(
+            MADOCGIA,
+            MABILL,
+            LIST_MA_BANSAO.length,
+            tongTien
+        );
+
+        // Gửi email thông báo (nếu user bật)
+        if (docGia.EMAIL) {
+            await sendBorrowNotification(
+                MADOCGIA,
+                docGia.EMAIL,
+                MABILL,
+                LIST_MA_BANSAO.length,
+                tongTien
+            );
+        }
+
         res.json({
             status: 'success',
             message: 'Tạo bill thành công',
@@ -478,12 +499,117 @@ const confirmPickup = async (req, res, next) => {
             { $set: { TINHTRANG: 'borrowing' } }
         );
         
+        // Lấy thông tin phiếu để tạo thông báo
+        const phieuDetails = await TheoDoiMuonSach.findOne({ MAPHIEU: { $in: LIST_MAPHIEU } });
+        if (phieuDetails) {
+            await notifyPickupSuccess(
+                bill.MADOCGIA,
+                LIST_MAPHIEU.length,
+                phieuDetails.NGAYHANTRA
+            );
+        }
+        
         res.json({
             status: 'success',
             message: 'Xác nhận lấy sách thành công',
             data: {
                 MABILL: bill.MABILL,
                 updatedPhieu: LIST_MAPHIEU.length
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// Hủy phiếu mượn (chỉ cho phép hủy các phiếu đang ở trạng thái waiting và còn trong hạn 3 ngày)
+const cancelBill = async (req, res, next) => {
+    try {
+        const { MABILL } = req.body;
+        const { MADOCGIA } = req.user; // Từ JWT token
+        
+        if (!MABILL) {
+            const error = new Error('Mã bill không hợp lệ');
+            error.status = 400;
+            return next(error);
+        }
+        
+        // Lấy thông tin bill
+        const bill = await BILL.findOne({ MABILL });
+        if (!bill) {
+            const error = new Error('Bill không tồn tại');
+            error.status = 404;
+            return next(error);
+        }
+        
+        // Kiểm tra bill có thuộc về user này không
+        if (bill.MADOCGIA !== MADOCGIA) {
+            const error = new Error('Bạn không có quyền hủy bill này');
+            error.status = 403;
+            return next(error);
+        }
+        
+        // Kiểm tra bill đã bị hủy chưa
+        if (bill.BIHUY === true) {
+            const error = new Error('Bill này đã bị hủy trước đó');
+            error.status = 400;
+            return next(error);
+        }
+        
+        // Kiểm tra thời hạn hủy (trong vòng 3 ngày kể từ ngày lập)
+        const now = new Date();
+        const ngayLap = new Date(bill.NGAYLAP);
+        const soNgayTuLap = Math.ceil((now - ngayLap) / (1000 * 60 * 60 * 24));
+        
+        if (soNgayTuLap > 3) {
+            const error = new Error('Đã quá thời hạn hủy đơn (3 ngày kể từ ngày lập). Vui lòng liên hệ thủ thư.');
+            error.status = 400;
+            return next(error);
+        }
+        
+        // Kiểm tra các phiếu có đang ở trạng thái waiting không
+        const phieuList = await TheoDoiMuonSach.find({
+            MAPHIEU: { $in: bill.DANHSACHPHIEU }
+        });
+        
+        const hasBorrowingPhieu = phieuList.some(p => p.TINHTRANG === 'borrowing');
+        if (hasBorrowingPhieu) {
+            const error = new Error('Không thể hủy bill có phiếu đã được lấy sách. Vui lòng liên hệ thủ thư.');
+            error.status = 400;
+            return next(error);
+        }
+        
+        // Xóa các phiếu mượn waiting
+        await TheoDoiMuonSach.deleteMany({
+            MAPHIEU: { $in: bill.DANHSACHPHIEU },
+            TINHTRANG: 'waiting'
+        });
+        
+        // Giải phóng các bản sao sách (đặt lại TRANGTHAI = false)
+        const maBanSaoList = phieuList.map(p => p.MA_BANSAO);
+        await BanSaoSach.updateMany(
+            { MA_BANSAO: { $in: maBanSaoList } },
+            { TRANGTHAI: false }
+        );
+        
+        // Đánh dấu bill bị hủy
+        bill.BIHUY = true;
+        await bill.save();
+        
+        // Nếu đã thanh toán online, tạo thông báo hoàn tiền
+        if (bill.TRANGTHAI === true && bill.LOAITHANHTOAN === 'online') {
+            await notifyRefund(MADOCGIA, MABILL, bill.TONGTIEN);
+        }
+        
+        res.json({
+            status: 'success',
+            message: bill.TRANGTHAI === true && bill.LOAITHANHTOAN === 'online' 
+                ? 'Hủy đơn thành công. Tiền sẽ được hoàn trả trong 3-5 ngày làm việc.' 
+                : 'Hủy đơn mượn sách thành công',
+            data: {
+                MABILL: bill.MABILL,
+                canceledPhieu: phieuList.length,
+                refundAmount: bill.TRANGTHAI === true && bill.LOAITHANHTOAN === 'online' ? bill.TONGTIEN : 0
             }
         });
     } catch (error) {
@@ -536,5 +662,6 @@ export default {
     getBillsByDocGia,
     getPendingPickupBills,
     confirmPickup,
+    cancelBill,
     cleanupExpiredBills
 };

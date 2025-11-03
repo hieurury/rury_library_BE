@@ -23,4 +23,7 @@ billRouter.get('/get/:MABILL', billController.getBillById);
 // GET - Lấy tất cả bill của độc giả
 billRouter.get('/docgia/:MADOCGIA', billController.getBillsByDocGia);
 
+// POST - Hủy bill (chỉ cho phiếu waiting, chưa thanh toán)
+billRouter.post('/cancel', billController.cancelBill);
+
 export default billRouter;
