@@ -1,5 +1,6 @@
 import express          from    "express";
 import authenticateToken from "../middleware/jwt.js";
+import { uploadFile } from "../middleware/uploadFile.js";
 const userRouter        =       express.Router();
 
 import userController   from    "../controller/userController.js";
@@ -25,6 +26,9 @@ userRouter.post("/favorites/remove", userController.removeFavorite);
 userRouter.put("/settings/email-notification", userController.updateEmailNotification);
 userRouter.put("/notifications/mark-read", userController.markNotificationAsRead);
 userRouter.put("/notifications/mark-all-read", userController.markAllNotificationsAsRead);
+userRouter.put("/update/:id", userController.updateUser);
+//POST
+userRouter.post("/upload-avatar/:id", uploadFile.single('avatar'), userController.uploadAvatar);
 //DELETE
 userRouter.delete("/notifications/delete-all", userController.deleteAllNotifications);
 

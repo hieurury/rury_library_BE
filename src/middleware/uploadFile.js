@@ -32,8 +32,24 @@ const packageBadgeStorage = multer.diskStorage({
   }
 });
 
+// Storage cho avatar người dùng
+const avatarStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, 'src/public/imgs/user-imgs');
+  },
+  filename: function (req, file, cb) {
+    // Tạo tên file unique: userId_timestamp_originalname
+    const userId = req.params.id || 'user';
+    const timestamp = Date.now();
+    const ext = path.extname(file.originalname);
+    const basename = path.basename(file.originalname, ext);
+    cb(null, `${userId}_${timestamp}_${basename}${ext}`);
+  }
+});
+
 const uploadCategoriesImage = multer({ storage: categoriesStorage });
 const uploadBooksImage = multer({ storage: booksStorage });
 const uploadPackageBadge = multer({ storage: packageBadgeStorage });
+const uploadFile = multer({ storage: avatarStorage });
 
-export { uploadCategoriesImage, uploadBooksImage, uploadPackageBadge };
+export { uploadCategoriesImage, uploadBooksImage, uploadPackageBadge, uploadFile };

@@ -425,6 +425,108 @@ const deleteAllNotifications = async (req, res, next) => {
     }
 };
 
+// Cập nhật thông tin người dùng
+const updateUser = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const { HOLOT, TEN, DIENTHOAI, EMAIL, DIACHI, NGAYSINH, PHAI, AVATAR } = req.body;
+        
+        const docGia = await DocGia.findOne({ MADOCGIA: id });
+        if (!docGia) {
+            const error = new Error('Độc giả không tồn tại');
+            error.status = 404;
+            return next(error);
+        }
+        
+        // Kiểm tra số điện thoại đã tồn tại chưa (nếu thay đổi)
+        if (DIENTHOAI && DIENTHOAI !== docGia.DIENTHOAI) {
+            const existingPhone = await DocGia.findOne({ DIENTHOAI, MADOCGIA: { $ne: id } });
+            if (existingPhone) {
+                const error = new Error('Số điện thoại đã được sử dụng');
+                error.status = 400;
+                return next(error);
+            }
+        }
+        
+        // Kiểm tra email đã tồn tại chưa (nếu thay đổi)
+        if (EMAIL && EMAIL !== docGia.EMAIL) {
+            const existingEmail = await DocGia.findOne({ EMAIL, MADOCGIA: { $ne: id } });
+            if (existingEmail) {
+                const error = new Error('Email đã được sử dụng');
+                error.status = 400;
+                return next(error);
+            }
+        }
+        
+        // Cập nhật các trường nếu có
+        if (HOLOT !== undefined) docGia.HOLOT = HOLOT;
+        if (TEN !== undefined) docGia.TEN = TEN;
+        if (DIENTHOAI !== undefined) docGia.DIENTHOAI = DIENTHOAI;
+        if (EMAIL !== undefined) docGia.EMAIL = EMAIL;
+        if (DIACHI !== undefined) docGia.DIACHI = DIACHI;
+        if (NGAYSINH !== undefined) docGia.NGAYSINH = NGAYSINH;
+        if (PHAI !== undefined) docGia.PHAI = PHAI;
+        if (AVATAR !== undefined) docGia.AVATAR = AVATAR;
+        
+        await docGia.save();
+        
+        res.json({
+            status: 'success',
+            message: 'Cập nhật thông tin thành công',
+            data: {
+                MADOCGIA: docGia.MADOCGIA,
+                HOLOT: docGia.HOLOT,
+                TEN: docGia.TEN,
+                AVATAR: docGia.AVATAR,
+                DIENTHOAI: docGia.DIENTHOAI,
+                EMAIL: docGia.EMAIL,
+                PHAI: docGia.PHAI,
+                DIACHI: docGia.DIACHI,
+                NGAYSINH: docGia.NGAYSINH
+            }
+        });
+    } catch (error) {
+        return next(error);
+    }
+};
+
+// Upload avatar
+const uploadAvatar = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        
+        if (!req.file) {
+            const error = new Error('Không có file được tải lên');
+            error.status = 400;
+            return next(error);
+        }
+        
+        const docGia = await DocGia.findOne({ MADOCGIA: id });
+        if (!docGia) {
+            const error = new Error('Độc giả không tồn tại');
+            error.status = 404;
+            return next(error);
+        }
+        
+        // Đường dẫn file được lưu bởi multer (relative path)
+        const avatarPath = req.file.path.replace(/\\/g, '/').replace('src/', '/');
+        
+        // Cập nhật avatar
+        docGia.AVATAR = avatarPath;
+        await docGia.save();
+        
+        res.json({
+            status: 'success',
+            message: 'Upload avatar thành công',
+            data: {
+                AVATAR: avatarPath
+            }
+        });
+    } catch (error) {
+        return next(error);
+    }
+};
+
 export default {
     register,
     login,
@@ -438,5 +540,7 @@ export default {
     getNotifications,
     markNotificationAsRead,
     markAllNotificationsAsRead,
-    deleteAllNotifications
+    deleteAllNotifications,
+    updateUser,
+    uploadAvatar
 }

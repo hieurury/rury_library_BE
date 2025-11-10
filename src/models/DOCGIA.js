@@ -34,7 +34,7 @@ const DOCGIA = new Schema({
     MADOCGIA: { type: String, required: true, unique: true },
     HOLOT: { type: String },
     TEN: { type: String, required: true },
-    AVATAR: { type: String, default: '/user-imgs/default.png' },
+    AVATAR: { type: String, default: '/user-imgs/default-avatar.png' },
     NGAYSINH: { type: Date, required: true },
     PHAI: { type: Boolean, required: true },
     DIACHI: { type: String },
