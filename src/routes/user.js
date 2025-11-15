@@ -12,7 +12,10 @@ userRouter.post("/register", userController.register);
 userRouter.post("/login", userController.login);
 
 userRouter.get("/admin/all", userController.getAllUsers);
+userRouter.get("/admin/statistics", userController.getUserStatistics);
 userRouter.put("/admin/subscribe-package", userController.subscribePackage);
+userRouter.put("/admin/lock/:id", userController.lockUser);
+userRouter.put("/admin/unlock/:id", userController.unlockUser);
 //xác thực hết dưới này
 userRouter.use(authenticateToken);
 //GET

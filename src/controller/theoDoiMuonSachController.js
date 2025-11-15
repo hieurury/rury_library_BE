@@ -12,7 +12,10 @@ import {
     notifyAccountLocked, 
     notifyAccountPermanentlyLocked 
 } from '../utils/notificationHelper.js';
-import { sendReturnNotification } from '../utils/emailService.js';
+import { 
+    sendReturnNotification,
+    sendAccountLockedByViolationEmail 
+} from '../utils/emailService.js';
 
 const generateMaMuon = async () => {
     const counter = await Counter.findOneAndUpdate(
@@ -328,14 +331,40 @@ const returnBook = async (req, res, next) => {
                 const soViPham = docGia.CACVIPHAM.length;
                 
                 if (soViPham % 9 === 0) {
+                    // Khóa vĩnh viễn
                     docGia.TRANGTHAI = false;
                     await notifyAccountPermanentlyLocked(MADOCGIA, soViPham);
+                    
+                    // Gửi email thông báo khóa vĩnh viễn
+                    if (docGia.EMAIL) {
+                        const hoTen = `${docGia.HOLOT || ''} ${docGia.TEN}`.trim();
+                        await sendAccountLockedByViolationEmail(
+                            docGia.EMAIL,
+                            hoTen,
+                            soViPham,
+                            null,
+                            true // isPermanent
+                        );
+                    }
                 } else if (soViPham % 3 === 0) {
+                    // Khóa tạm thời 7 ngày
                     const ngayMoKhoa = new Date();
                     ngayMoKhoa.setDate(ngayMoKhoa.getDate() + 7);
                     docGia.NGAYMOKHOA = ngayMoKhoa;
                     docGia.TRANGTHAI = false;
                     await notifyAccountLocked(MADOCGIA, soViPham, ngayMoKhoa);
+                    
+                    // Gửi email thông báo khóa tạm thời
+                    if (docGia.EMAIL) {
+                        const hoTen = `${docGia.HOLOT || ''} ${docGia.TEN}`.trim();
+                        await sendAccountLockedByViolationEmail(
+                            docGia.EMAIL,
+                            hoTen,
+                            soViPham,
+                            ngayMoKhoa,
+                            false // isPermanent
+                        );
+                    }
                 }
                 
                 await docGia.save();

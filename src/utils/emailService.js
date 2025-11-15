@@ -170,9 +170,135 @@ const sendReturnNotification = async (MADOCGIA, email, soSach, tongPhi) => {
     return await sendEmail(email, subject, htmlContent);
 };
 
+/**
+ * Template: Email thông báo tài khoản bị khóa do vi phạm chính sách
+ */
+const sendAccountLockedByViolationEmail = async (email, hoTen, soViPham, ngayMoKhoa, isPermanent = false) => {
+    if (!email) return false;
+
+    const subject = isPermanent 
+        ? `⚠️ Tài khoản bị khóa vĩnh viễn - Thư viện Rury`
+        : `⚠️ Tài khoản bị khóa tạm thời - Thư viện Rury`;
+    
+    const ngayMoKhoaFormatted = ngayMoKhoa ? new Date(ngayMoKhoa).toLocaleDateString('vi-VN') : '';
+    
+    const htmlContent = `
+        <div style="font-family: Arial, sans-serif; padding: 20px; background-color: #f5f5f5;">
+            <div style="max-width: 600px; margin: 0 auto; background-color: white; padding: 30px; border-radius: 10px;">
+                <h2 style="color: #f44336;">⚠️ Cảnh báo: Tài khoản bị khóa</h2>
+                <p>Xin chào <strong>${hoTen}</strong>,</p>
+                <p>Tài khoản của bạn tại Thư viện Rury đã bị khóa do vi phạm chính sách sử dụng.</p>
+                
+                <div style="background-color: #ffebee; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #f44336;">
+                    <p><strong>Lý do:</strong> Vi phạm chính sách mượn/trả sách</p>
+                    <p><strong>Số lần vi phạm:</strong> ${soViPham} lần</p>
+                    ${isPermanent ? `
+                        <p><strong>Loại khóa:</strong> <span style="color: #d32f2f;">Vĩnh viễn</span></p>
+                        <p style="color: #d32f2f; font-weight: bold;">Tài khoản của bạn đã bị khóa vĩnh viễn.</p>
+                    ` : `
+                        <p><strong>Loại khóa:</strong> Tạm thời</p>
+                        <p><strong>Ngày mở khóa:</strong> ${ngayMoKhoaFormatted}</p>
+                    `}
+                </div>
+
+                <div style="background-color: #fff3cd; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #ff9800;">
+                    <p><strong>Các hành vi vi phạm bao gồm:</strong></p>
+                    <ul style="margin: 10px 0; padding-left: 20px;">
+                        <li>Trả sách quá hạn</li>
+                        <li>Làm mất hoặc hư hỏng sách</li>
+                        <li>Vi phạm quy định thư viện khác</li>
+                    </ul>
+                </div>
+
+                ${isPermanent ? `
+                    <p>Để được xem xét mở khóa tài khoản, vui lòng liên hệ với chúng tôi qua email: 
+                    <a href="mailto:${process.env.EMAIL_USER || 'support@library.com'}" style="color: #2196F3;">
+                        ${process.env.EMAIL_USER || 'support@library.com'}
+                    </a></p>
+                ` : `
+                    <p>Tài khoản của bạn sẽ được tự động mở khóa vào ngày <strong>${ngayMoKhoaFormatted}</strong>.</p>
+                    <p style="color: #ff9800;">⚠️ Lưu ý: Nếu tiếp tục vi phạm, tài khoản có thể bị khóa vĩnh viễn.</p>
+                `}
+
+                <hr style="margin: 20px 0; border: none; border-top: 1px solid #eee;">
+                <p style="color: #666; font-size: 12px;">
+                    Thư viện Rury - Nơi tri thức hội tụ<br>
+                    Email hỗ trợ: ${process.env.EMAIL_USER || 'support@library.com'}
+                </p>
+            </div>
+        </div>
+    `;
+
+    return await sendEmail(email, subject, htmlContent);
+};
+
+/**
+ * Template: Email thông báo tài khoản bị quản trị viên khóa
+ */
+const sendAccountLockedByAdminEmail = async (email, hoTen, reason, duration, isPermanent = false) => {
+    if (!email) return false;
+
+    const subject = `⚠️ Tài khoản bị khóa - Thư viện Rury`;
+    
+    const ngayMoKhoa = duration > 0 ? new Date(Date.now() + duration * 24 * 60 * 60 * 1000) : null;
+    const ngayMoKhoaFormatted = ngayMoKhoa ? ngayMoKhoa.toLocaleDateString('vi-VN') : '';
+    
+    const htmlContent = `
+        <div style="font-family: Arial, sans-serif; padding: 20px; background-color: #f5f5f5;">
+            <div style="max-width: 600px; margin: 0 auto; background-color: white; padding: 30px; border-radius: 10px;">
+                <h2 style="color: #f44336;">⚠️ Thông báo: Tài khoản bị khóa</h2>
+                <p>Xin chào <strong>${hoTen}</strong>,</p>
+                <p>Tài khoản của bạn tại Thư viện Rury đã bị khóa bởi quản trị viên.</p>
+                
+                <div style="background-color: #ffebee; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #f44336;">
+                    <p><strong>Lý do khóa:</strong></p>
+                    <p style="white-space: pre-wrap;">${reason || 'Phát hiện một số hoạt động tình nghi của bạn đối với hệ thống thư viện'}</p>
+                    ${isPermanent ? `
+                        <p style="margin-top: 15px;"><strong>Loại khóa:</strong> <span style="color: #d32f2f;">Vĩnh viễn</span></p>
+                    ` : `
+                        <p style="margin-top: 15px;"><strong>Loại khóa:</strong> Tạm thời</p>
+                        <p><strong>Thời gian khóa:</strong> ${duration} ngày</p>
+                        <p><strong>Ngày mở khóa:</strong> ${ngayMoKhoaFormatted}</p>
+                    `}
+                </div>
+
+                <div style="background-color: #e3f2fd; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #2196F3;">
+                    <p><strong>📧 Cần hỗ trợ hoặc có ý kiến phản hồi?</strong></p>
+                    <p>Nếu bạn cho rằng đây là một sự nhầm lẫn hoặc muốn khiếu nại về quyết định này, 
+                    vui lòng liên hệ với chúng tôi qua email:</p>
+                    <p style="text-align: center; margin: 15px 0;">
+                        <a href="mailto:${process.env.EMAIL_USER || 'support@library.com'}?subject=Khiếu nại khóa tài khoản - ${hoTen}" 
+                           style="display: inline-block; background-color: #2196F3; color: white; padding: 12px 24px; 
+                                  text-decoration: none; border-radius: 5px; font-weight: bold;">
+                            Gửi email phản hồi
+                        </a>
+                    </p>
+                    <p style="font-size: 12px; color: #666; text-align: center;">
+                        Hoặc gửi trực tiếp đến: ${process.env.EMAIL_USER || 'support@library.com'}
+                    </p>
+                </div>
+
+                ${!isPermanent ? `
+                    <p>Tài khoản của bạn sẽ được tự động mở khóa vào ngày <strong>${ngayMoKhoaFormatted}</strong>.</p>
+                ` : ''}
+
+                <hr style="margin: 20px 0; border: none; border-top: 1px solid #eee;">
+                <p style="color: #666; font-size: 12px;">
+                    Thư viện Rury - Nơi tri thức hội tụ<br>
+                    Email hỗ trợ: ${process.env.EMAIL_USER || 'support@library.com'}
+                </p>
+            </div>
+        </div>
+    `;
+
+    return await sendEmail(email, subject, htmlContent);
+};
+
 export {
     sendRegistrationEmail,
     sendBorrowNotification,
     sendDueSoonNotification,
-    sendReturnNotification
+    sendReturnNotification,
+    sendAccountLockedByViolationEmail,
+    sendAccountLockedByAdminEmail
 };

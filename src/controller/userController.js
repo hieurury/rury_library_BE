@@ -4,6 +4,7 @@ import Package  from "../models/Package.js";
 import TheoDoiMuonSach from "../models/THEODOIMUONSACH.js";
 import jwt      from "jsonwebtoken";
 import dotenv   from "dotenv";
+import { sendAccountLockedByAdminEmail } from "../utils/emailService.js";
 dotenv.config();
 
 const generateAccountId = async () => {
@@ -69,6 +70,36 @@ const login = async (req, res, next) => {
         if(docGia.PASSWORD !== PASSWORD) {
             const error = new Error("Mật khẩu không đúng");
             return next(error);
+        }
+        
+        // Kiểm tra trạng thái tài khoản
+        if(!docGia.TRANGTHAI) {
+            // Tài khoản bị khóa
+            let errorMessage = "Tài khoản của bạn đã bị khóa";
+            
+            if(docGia.NGAYMOKHOA) {
+                // Khóa tạm thời - kiểm tra xem đã hết hạn khóa chưa
+                const now = new Date();
+                const unlockDate = new Date(docGia.NGAYMOKHOA);
+                
+                if(now >= unlockDate) {
+                    // Đã hết hạn khóa - tự động mở khóa
+                    docGia.TRANGTHAI = true;
+                    docGia.NGAYMOKHOA = null;
+                    await docGia.save();
+                } else {
+                    // Vẫn còn trong thời gian khóa
+                    const daysRemaining = Math.ceil((unlockDate - now) / (1000 * 60 * 60 * 24));
+                    errorMessage = `Tài khoản của bạn đã bị khóa tạm thời. Sẽ được mở khóa vào ${unlockDate.toLocaleDateString('vi-VN')} (còn ${daysRemaining} ngày)`;
+                    const error = new Error(errorMessage);
+                    return next(error);
+                }
+            } else {
+                // Khóa vĩnh viễn
+                errorMessage = "Tài khoản của bạn đã bị khóa vĩnh viễn. Vui lòng liên hệ quản trị viên để biết thêm chi tiết";
+                const error = new Error(errorMessage);
+                return next(error);
+            }
         }
         
         // Tạo JWT token
@@ -527,6 +558,155 @@ const uploadAvatar = async (req, res, next) => {
     }
 };
 
+// Khóa tài khoản người dùng
+const lockUser = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const { reason, duration } = req.body; // duration in days, 0 = permanent
+        
+        const docGia = await DocGia.findOne({ MADOCGIA: id });
+        if (!docGia) {
+            const error = new Error('Độc giả không tồn tại');
+            error.status = 404;
+            return next(error);
+        }
+        
+        if (!docGia.TRANGTHAI) {
+            const error = new Error('Tài khoản đã bị khóa');
+            error.status = 400;
+            return next(error);
+        }
+        
+        // Khóa tài khoản
+        docGia.TRANGTHAI = false;
+        
+        // Nếu có thời hạn khóa
+        if (duration && duration > 0) {
+            const unlockDate = new Date();
+            unlockDate.setDate(unlockDate.getDate() + duration);
+            docGia.NGAYMOKHOA = unlockDate;
+        } else {
+            docGia.NGAYMOKHOA = null; // Khóa vĩnh viễn
+        }
+        
+        // Thêm thông báo cho người dùng
+        docGia.NOTIFICATIONS.push({
+            LABEL: 'Tài khoản bị khóa',
+            NOIDUNG: reason || 'Tài khoản của bạn đã bị khóa do vi phạm quy định',
+            NGAYTAO: new Date(),
+            DAXEM: false
+        });
+        
+        await docGia.save();
+        
+        // Gửi email thông báo khóa tài khoản bởi admin
+        if (docGia.EMAIL) {
+            const hoTen = `${docGia.HOLOT || ''} ${docGia.TEN}`.trim();
+            const isPermanent = !duration || duration === 0;
+            
+            await sendAccountLockedByAdminEmail(
+                docGia.EMAIL,
+                hoTen,
+                reason,
+                duration || 0,
+                isPermanent
+            );
+        }
+        
+        res.json({
+            status: 'success',
+            message: 'Khóa tài khoản thành công',
+            data: {
+                MADOCGIA: docGia.MADOCGIA,
+                TRANGTHAI: docGia.TRANGTHAI,
+                NGAYMOKHOA: docGia.NGAYMOKHOA
+            }
+        });
+    } catch (error) {
+        return next(error);
+    }
+};
+
+// Mở khóa tài khoản người dùng
+const unlockUser = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        
+        const docGia = await DocGia.findOne({ MADOCGIA: id });
+        if (!docGia) {
+            const error = new Error('Độc giả không tồn tại');
+            error.status = 404;
+            return next(error);
+        }
+        
+        if (docGia.TRANGTHAI) {
+            const error = new Error('Tài khoản đang hoạt động');
+            error.status = 400;
+            return next(error);
+        }
+        
+        // Mở khóa tài khoản
+        docGia.TRANGTHAI = true;
+        docGia.NGAYMOKHOA = null;
+        
+        // Thêm thông báo cho người dùng
+        docGia.NOTIFICATIONS.push({
+            LABEL: 'Tài khoản được mở khóa',
+            NOIDUNG: 'Tài khoản của bạn đã được mở khóa. Vui lòng tuân thủ quy định để tránh bị khóa lại',
+            NGAYTAO: new Date(),
+            DAXEM: false
+        });
+        
+        await docGia.save();
+        
+        res.json({
+            status: 'success',
+            message: 'Mở khóa tài khoản thành công',
+            data: {
+                MADOCGIA: docGia.MADOCGIA,
+                TRANGTHAI: docGia.TRANGTHAI
+            }
+        });
+    } catch (error) {
+        return next(error);
+    }
+};
+
+// Lấy thống kê người dùng (cho admin)
+const getUserStatistics = async (req, res, next) => {
+    try {
+        const totalUsers = await DocGia.countDocuments();
+        const activeUsers = await DocGia.countDocuments({ TRANGTHAI: true });
+        const lockedUsers = await DocGia.countDocuments({ TRANGTHAI: false });
+        
+        // Người dùng mới trong 30 ngày
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        const newUsers = await DocGia.countDocuments({
+            'GOI.NgayDangKy': { $gte: thirtyDaysAgo }
+        });
+        
+        // Người dùng có vi phạm
+        const usersWithViolations = await DocGia.countDocuments({
+            'CACVIPHAM.0': { $exists: true }
+        });
+        
+        res.json({
+            status: 'success',
+            message: 'Lấy thống kê người dùng thành công',
+            data: {
+                totalUsers,
+                activeUsers,
+                lockedUsers,
+                newUsers,
+                usersWithViolations
+            }
+        });
+    } catch (error) {
+        return next(error);
+    }
+};
+
 export default {
     register,
     login,
@@ -542,5 +722,8 @@ export default {
     markAllNotificationsAsRead,
     deleteAllNotifications,
     updateUser,
-    uploadAvatar
+    uploadAvatar,
+    lockUser,
+    unlockUser,
+    getUserStatistics
 }
