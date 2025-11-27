@@ -31,6 +31,23 @@ const createMuonSachBulk = async (req, res, next) => {
     try {
         const { MANHANVIEN, MADOCGIA, LIST_MA_BANSAO } = req.body; // LIST_MA_BANSAO: [MA_BANSAO1, MA_BANSAO2, ...]
         
+        // Validate MANHANVIEN (bắt buộc khi mượn tại quầy)
+        if (!MANHANVIEN) {
+            const error = new Error('Thiếu mã nhân viên');
+            error.status = 400;
+            return next(error);
+        }
+        
+        // Kiểm tra nhân viên tồn tại (nếu không phải system)
+        if (MANHANVIEN !== 'system') {
+            const nhanVien = await NhanVien.findOne({ MSNV: MANHANVIEN });
+            if (!nhanVien) {
+                const error = new Error('Nhân viên không tồn tại');
+                error.status = 404;
+                return next(error);
+            }
+        }
+        
         // Lấy thông tin độc giả & gói
         const docGia = await DOCGIA.findOne({ MADOCGIA });
         if (!docGia) {
@@ -85,10 +102,19 @@ const createMuonSachBulk = async (req, res, next) => {
         const NGAYHANTRA = new Date(NGAYMUON);
         NGAYHANTRA.setDate(NGAYHANTRA.getDate() + packageInfo.ThoiHanMuon);
         
+        // Lấy danh sách MASACH từ bản sao để lấy giá
+        const maSachList = banSaoList.map(bs => bs.MASACH);
+        const sachList = await SACH.find({ MASACH: { $in: maSachList } });
+        
         const newMuonSachList = await Promise.all(
             LIST_MA_BANSAO.map(async (MA_BANSAO) => {
                 const MAPHIEU = await generateMaMuon();
-                const sach = banSaoList.find(s => s.MA_BANSAO === MA_BANSAO);
+                const banSao = banSaoList.find(s => s.MA_BANSAO === MA_BANSAO);
+                const sach = sachList.find(s => s.MASACH === banSao.MASACH);
+                
+                if (!sach) {
+                    throw new Error(`Không tìm thấy thông tin sách cho bản sao ${MA_BANSAO}`);
+                }
                 
                 return new TheoDoiMuonSach({
                     MAPHIEU,
@@ -98,7 +124,8 @@ const createMuonSachBulk = async (req, res, next) => {
                     NGAYMUON,
                     TINHTRANG: 'borrowing',
                     NGAYHANTRA,
-                    TRANGTHAISACH: sach.TINHTRANG
+                    TRANGTHAISACH: banSao.TINHTRANG,
+                    GIA: sach.DONGIA
                 });
             })
         );
@@ -282,16 +309,35 @@ const returnBook = async (req, res, next) => {
         let tongPhiMat = 0;
         const violations = [];
         
+        // Lấy giá sách cho các phiếu cũ không có trường GIA
+        const maBanSaoList = phieuMuonList.map(p => p.MA_BANSAO);
+        const banSaoSachList = await BanSaoSach.find({ MA_BANSAO: { $in: maBanSaoList } });
+        const maSachList = banSaoSachList.map(bs => bs.MASACH);
+        const sachList = await SACH.find({ MASACH: { $in: maSachList } });
+        
         for (const phieu of phieuMuonList) {
             const isLost = LIST_LOST_BOOKS && LIST_LOST_BOOKS.includes(phieu.MAPHIEU);
             const ngayHanTra = new Date(phieu.NGAYHANTRA);
             const soNgayTre = Math.max(0, Math.ceil((NGAYTRA - ngayHanTra) / (1000 * 60 * 60 * 24)));
             
+            // Lấy giá sách: ưu tiên từ phiếu mượn, nếu không có thì query từ SACH
+            let giaSach = phieu.GIA;
+            if (!giaSach) {
+                const banSao = banSaoSachList.find(bs => bs.MA_BANSAO === phieu.MA_BANSAO);
+                if (banSao) {
+                    const sach = sachList.find(s => s.MASACH === banSao.MASACH);
+                    giaSach = sach ? sach.DONGIA : 0;
+                }
+            }
+            
             if (isLost) {
-                tongPhiMat += phieu.GIA * 20;
+                // Phí mất sách = giá mượn × 20
+                const phiMat = giaSach * 20;
+                tongPhiMat += phiMat;
                 violations.push({
                     LOAI: 'lost_book',
                     NGAYVIPHAM: NGAYTRA,
+                    TIENPHAT: phiMat,
                     MAPHIEU: phieu.MAPHIEU,
                     MA_BANSAO: phieu.MA_BANSAO
                 });
@@ -302,10 +348,13 @@ const returnBook = async (req, res, next) => {
                 );
             } else {
                 if (soNgayTre > 0) {
-                    tongPhiTre += phieu.GIA * 1.5 * soNgayTre;
+                    // Phí trễ = giá mượn × 1.5 × số ngày
+                    const phiTre = giaSach * 1.5 * soNgayTre;
+                    tongPhiTre += phiTre;
                     violations.push({
                         LOAI: 'delay',
                         NGAYVIPHAM: NGAYTRA,
+                        TIENPHAT: phiTre,
                         MAPHIEU: phieu.MAPHIEU,
                         SONGAYTRE: soNgayTre
                     });

@@ -15,6 +15,7 @@ billRouter.use(authenticateToken);
 
 // POST - Tạo bill mới
 billRouter.post('/checkBill', billController.checkBillThanhToan);
+billRouter.post('/checkBillPayPal', billController.checkBillPayPal);
 billRouter.post('/create', billController.createBill);
 
 // GET - Lấy bill theo mã

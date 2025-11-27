@@ -30,7 +30,7 @@ const BILL = new Schema({
     LOAITHANHTOAN: {
         type: String,
         required: true,
-        enum: ['cash', 'online'], // cash: tiền mặt, online: chuyển khoản VNPAY
+        enum: ['cash', 'online', 'paypal'], // cash: tiền mặt, online: VNPAY, paypal: PayPal
         default: 'cash'
     },
     NGAYLAP: {
@@ -43,6 +43,18 @@ const BILL = new Schema({
         required: false
     },
     GOI: {
+        type: String,
+        required: false
+    },
+    PAYPAL_ORDER_ID: {
+        type: String,
+        required: false
+    },
+    PAYPAL_CAPTURE_ID: {
+        type: String,
+        required: false
+    },
+    VNPAY_TRANSACTION_ID: {
         type: String,
         required: false
     }

@@ -148,8 +148,236 @@ const accountLogin = async (req, res, next) => {
     }
 }
 
+//GET: /admin/account/all - Lấy tất cả nhân viên
+const getAllNhanVien = async (req, res, next) => {
+    try {
+        const { masterkey } = req.headers;
+        const secretMasterKey = process.env.SECRET_MASTER_KEY;
+        
+        let allNhanVien;
+        let isMaster = false;
+        
+        // Kiểm tra master key
+        if (masterkey && masterkey === secretMasterKey) {
+            // Master có toàn quyền - lấy tất cả nhân viên
+            allNhanVien = await NhanVien.find().select('-Password');
+            isMaster = true;
+        } else {
+            // Admin thường - chỉ xem thủ thư
+            allNhanVien = await NhanVien.find({ ChucVu: 'Librarian' }).select('-Password');
+            isMaster = false;
+        }
+        
+        res.json({
+            status: 'success',
+            message: 'Lấy danh sách nhân viên thành công',
+            isMaster,
+            data: allNhanVien
+        });
+    } catch (err) {
+        next(err);
+    }
+}
+
+//GET: /admin/account/:msnv - Lấy thông tin nhân viên theo MSNV
+const getNhanVienById = async (req, res, next) => {
+    try {
+        const { msnv } = req.params;
+        const nhanVien = await NhanVien.findOne({ MSNV: msnv }).select('-Password');
+        
+        if (!nhanVien) {
+            const error = new Error("Nhân viên không tồn tại!");
+            error.status = 404;
+            return next(error);
+        }
+
+        res.json({
+            status: 'success',
+            message: 'Lấy thông tin nhân viên thành công',
+            data: nhanVien
+        });
+    } catch (err) {
+        next(err);
+    }
+}
+
+//PUT: /admin/account/:msnv - Cập nhật thông tin nhân viên
+const updateNhanVien = async (req, res, next) => {
+    try {
+        const { msnv } = req.params;
+        const { HoTenNV, DiaChi, soDienThoai, Password } = req.body;
+        const { masterKey } = req.headers;
+        const secretMasterKey = process.env.SECRET_MASTER_KEY;
+
+        const nhanVien = await NhanVien.findOne({ MSNV: msnv });
+        if (!nhanVien) {
+            const error = new Error("Nhân viên không tồn tại!");
+            error.status = 404;
+            return next(error);
+        }
+
+        // Kiểm tra quyền: chỉ Master mới được sửa Admin
+        if (nhanVien.ChucVu === 'Admin') {
+            if (!masterKey || masterKey !== secretMasterKey) {
+                const error = new Error("Không có quyền chỉnh sửa thông tin Admin! Chỉ Master mới có quyền này.");
+                error.status = 403;
+                return next(error);
+            }
+        }
+
+        // Kiểm tra số điện thoại trùng (nếu thay đổi)
+        if (soDienThoai && soDienThoai !== nhanVien.soDienThoai) {
+            const existingPhone = await NhanVien.findOne({ 
+                soDienThoai, 
+                MSNV: { $ne: msnv } 
+            });
+            if (existingPhone) {
+                const error = new Error("Số điện thoại đã được sử dụng!");
+                error.status = 400;
+                return next(error);
+            }
+        }
+
+        // Cập nhật thông tin
+        if (HoTenNV) nhanVien.HoTenNV = HoTenNV;
+        if (DiaChi) nhanVien.DiaChi = DiaChi;
+        if (soDienThoai) nhanVien.soDienThoai = soDienThoai;
+        if (Password) nhanVien.Password = Password;
+
+        const updatedNhanVien = await nhanVien.save();
+        
+        res.json({
+            status: 'success',
+            message: 'Cập nhật nhân viên thành công',
+            data: {
+                MSNV: updatedNhanVien.MSNV,
+                HoTenNV: updatedNhanVien.HoTenNV,
+                ChucVu: updatedNhanVien.ChucVu,
+                DiaChi: updatedNhanVien.DiaChi,
+                soDienThoai: updatedNhanVien.soDienThoai
+            }
+        });
+    } catch (err) {
+        next(err);
+    }
+}
+
+//DELETE: /admin/account/:msnv - Xóa nhân viên
+const deleteNhanVien = async (req, res, next) => {
+    try {
+        const { msnv } = req.params;
+        const { masterKey } = req.headers;
+        const secretMasterKey = process.env.SECRET_MASTER_KEY;
+
+        const nhanVien = await NhanVien.findOne({ MSNV: msnv });
+        if (!nhanVien) {
+            const error = new Error("Nhân viên không tồn tại!");
+            error.status = 404;
+            return next(error);
+        }
+
+        // Kiểm tra quyền: chỉ Master mới được xóa Admin
+        if (nhanVien.ChucVu === 'Admin') {
+            if (!masterKey || masterKey !== secretMasterKey) {
+                const error = new Error("Không thể xóa tài khoản Admin! Chỉ Master mới có quyền này.");
+                error.status = 403;
+                return next(error);
+            }
+        }
+
+        await NhanVien.deleteOne({ MSNV: msnv });
+
+        res.json({
+            status: 'success',
+            message: 'Xóa nhân viên thành công'
+        });
+    } catch (err) {
+        next(err);
+    }
+}
+
+//GET: /admin/account/statistics - Thống kê nhân viên
+const getStaffStatistics = async (req, res, next) => {
+    try {
+        const TheoDoiMuonSach = (await import('../models/THEODOIMUONSACH.js')).default;
+        const { masterkey } = req.headers;
+        const secretMasterKey = process.env.SECRET_MASTER_KEY;
+        
+        const isMaster = masterkey && masterkey === secretMasterKey;
+        
+        // Tổng số nhân viên - tùy theo quyền
+        let totalStaff, totalAdmins, totalLibrarians, allStaff;
+        
+        if (isMaster) {
+            // Master xem tất cả
+            totalStaff = await NhanVien.countDocuments();
+            totalAdmins = await NhanVien.countDocuments({ ChucVu: 'Admin' });
+            totalLibrarians = await NhanVien.countDocuments({ ChucVu: 'Librarian' });
+            allStaff = await NhanVien.find({ ChucVu: 'Librarian' }).select('-Password');
+        } else {
+            // Admin thường chỉ xem thủ thư
+            totalStaff = await NhanVien.countDocuments({ ChucVu: 'Librarian' });
+            totalAdmins = 0;
+            totalLibrarians = await NhanVien.countDocuments({ ChucVu: 'Librarian' });
+            allStaff = await NhanVien.find({ ChucVu: 'Librarian' }).select('-Password');
+        }
+
+        // Tổng số phiếu mượn
+        const totalBorrows = await TheoDoiMuonSach.countDocuments();
+        const systemBorrows = await TheoDoiMuonSach.countDocuments({ MANHANVIEN: 'system' });
+        const staffBorrows = totalBorrows - systemBorrows;
+
+        // Tỷ lệ phiếu mượn
+        const staffBorrowRate = totalBorrows > 0 
+            ? ((staffBorrows / totalBorrows) * 100).toFixed(2) 
+            : 0;
+
+        // Lấy thống kê phiếu mượn của từng thủ thư
+        const staffBorrowStats = await Promise.all(
+            allStaff.map(async (staff) => {
+                const borrowCount = await TheoDoiMuonSach.countDocuments({ 
+                    MANHANVIEN: staff.MSNV 
+                });
+                const borrowRate = totalBorrows > 0 
+                    ? ((borrowCount / totalBorrows) * 100).toFixed(2) 
+                    : 0;
+
+                return {
+                    MSNV: staff.MSNV,
+                    HoTenNV: staff.HoTenNV,
+                    borrowCount,
+                    borrowRate: parseFloat(borrowRate)
+                };
+            })
+        );
+
+        res.json({
+            status: 'success',
+            message: 'Lấy thống kê nhân viên thành công',
+            isMaster,
+            data: {
+                totalStaff,
+                totalAdmins,
+                totalLibrarians,
+                totalBorrows,
+                systemBorrows,
+                staffBorrows,
+                staffBorrowRate: parseFloat(staffBorrowRate),
+                staffBorrowStats: staffBorrowStats.sort((a, b) => b.borrowCount - a.borrowCount)
+            }
+        });
+    } catch (err) {
+        next(err);
+    }
+}
+
 export default {
     createNhanVien,
     createAdmin,
-    accountLogin
+    accountLogin,
+    getAllNhanVien,
+    getNhanVienById,
+    updateNhanVien,
+    deleteNhanVien,
+    getStaffStatistics
 }

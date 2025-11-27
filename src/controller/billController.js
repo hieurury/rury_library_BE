@@ -6,6 +6,7 @@ import BanSaoSach from '../models/BanSaoSach.js';
 import SACH from '../models/SACH.js';
 import Counter from '../models/Counter.js';
 import { generatePaymentUrl, verifyReturnUrl } from '../utils/vnpayService.js';
+import { createPayPalOrder, capturePayPalOrder, refundPayPalPayment } from '../utils/paypalService.js';
 import { notifyBorrowSuccess, notifyPickupSuccess, notifyRefund } from '../utils/notificationHelper.js';
 import { sendBorrowNotification } from '../utils/emailService.js';
 
@@ -40,7 +41,7 @@ const generateMaGD = async () => {
 };
 
 // NGUYÊN TẮC:
-// 1. VNPAY (online): KHÔNG tạo gì cho đến khi SUCCESS callback
+// 1. VNPAY/PAYPAL (online): KHÔNG tạo gì cho đến khi SUCCESS callback
 // 2. CASH: CHỈ dùng cho thủ thư tạo trực tiếp tại quầy
 //          Web client KHÔNG được phép tạo bill CASH
 // ================================================
@@ -173,14 +174,141 @@ const checkBillThanhToan = async (req, res, next) => {
     }
 };
 
+const checkBillPayPal = async (req, res, next) => {
+    try {
+        const { MADOCGIA, LIST_MA_BANSAO } = req.body;
+        
+        // Validate đầu vào
+        if (!LIST_MA_BANSAO || LIST_MA_BANSAO.length === 0) {
+            const error = new Error('Danh sách bản sao trống');
+            error.status = 400;
+            return next(error);
+        }
+        
+        // Lấy thông tin độc giả và gói
+        const docGia = await DOCGIA.findOne({ MADOCGIA });
+        if (!docGia) {
+            const error = new Error('Độc giả không tồn tại');
+            error.status = 404;
+            return next(error);
+        }
+        
+        const packageInfo = await Package.findOne({ MaGoi: docGia.GOI.MaGoi });
+        if (!packageInfo) {
+            const error = new Error('Gói dịch vụ không tồn tại');
+            error.status = 404;
+            return next(error);
+        }
+        
+        // Kiểm tra gói có hết hạn không
+        const now = new Date();
+        const ngayHetHan = new Date(docGia.GOI.NgayHetHan);
+        if (now > ngayHetHan) {
+            const error = new Error('Gói dịch vụ đã hết hạn. Vui lòng gia hạn gói để tiếp tục mượn sách');
+            error.status = 403;
+            return next(error);
+        }
+        
+        // Kiểm tra giới hạn mượn
+        const sachMuonHienTai = await TheoDoiMuonSach.countDocuments({
+            MADOCGIA,
+            TINHTRANG: 'borrowing'
+        });
+        
+        const tongSachMuon = sachMuonHienTai + LIST_MA_BANSAO.length;
+        if (tongSachMuon > packageInfo.SoSachToiDa) {
+            const error = new Error(
+                `Vượt quá giới hạn mượn. Hiện tại: ${sachMuonHienTai}, muốn thêm: ${LIST_MA_BANSAO.length}, tối đa: ${packageInfo.SoSachToiDa}`
+            );
+            error.status = 400;
+            return next(error);
+        }
+        
+        // Validate tất cả bản sao
+        let tongTien = 0;
+        for (const MA_BANSAO of LIST_MA_BANSAO) {
+            const banSao = await BanSaoSach.findOne({ MA_BANSAO });
+            
+            if (!banSao) {
+                const error = new Error(`Bản sao ${MA_BANSAO} không tồn tại`);
+                error.status = 404;
+                return next(error);
+            }
+            
+            // HARD LOCK: Sách đã được mượn
+            if (banSao.TRANGTHAI === true) {
+                const error = new Error(`Bản sao ${MA_BANSAO} đã được mượn`);
+                error.status = 400;
+                return next(error);
+            }
+            
+            // SOFT LOCK: Sách đang chờ thanh toán
+            if (banSao.PENDING_BILL && banSao.PENDING_BILL !== '') {
+                const error = new Error(`Bản sao ${MA_BANSAO} đang được giữ chỗ bởi đơn khác. Vui lòng chọn bản sao khác.`);
+                error.status = 400;
+                return next(error);
+            }
+            
+            const sach = await SACH.findOne({ MASACH: banSao.MASACH });
+            if (!sach) {
+                const error = new Error(`Sách ${banSao.MASACH} không tồn tại`);
+                error.status = 404;
+                return next(error);
+            }
+            
+            tongTien += sach.DONGIA || 0;
+        }
+        
+        const maGD = await generateMaGD();
+        
+        // Tạo PayPal order
+        const orderInfo = `RuryLib - Thanh toan muon sach - ${LIST_MA_BANSAO.length} cuon - GDID: ${maGD}`;
+        const paypalOrder = await createPayPalOrder(maGD, tongTien, orderInfo);
+        
+        res.json({
+            requirePayment: true,
+            paymentUrl: paypalOrder.approvalUrl,
+            orderId: paypalOrder.orderId,
+            amountVND: paypalOrder.amountVND,
+            amountUSD: paypalOrder.amountUSD,
+            provider: 'paypal',
+            warning: 'Vui lòng hoàn tất thanh toán trên PayPal để xác nhận đơn mượn sách.'
+        });
+        
+    } catch (error) {
+        next(error);
+    }
+};
+
 const createBill = async (req, res, next) => {
     try {
-        const { MADOCGIA, LIST_MA_BANSAO, LOAITHANHTOAN } = req.body;
+        const { MADOCGIA, LIST_MA_BANSAO, LOAITHANHTOAN, PAYPAL_TOKEN, PAYER_ID, VNPAY_TRANSACTION_ID } = req.body;
         console.log(MADOCGIA, LIST_MA_BANSAO, LOAITHANHTOAN);
         if(!MADOCGIA || !LIST_MA_BANSAO || LIST_MA_BANSAO.length === 0 || !LOAITHANHTOAN) {
             const error = new Error('Thông tin thanh toán không hợp lệ!');
             error.status = 400;
             return next(error);
+        }
+        
+        // Nếu là PayPal, capture payment trước
+        let paypalCaptureId = null;
+        if (LOAITHANHTOAN === 'paypal' && PAYPAL_TOKEN) {
+            try {
+                const captureResult = await capturePayPalOrder(PAYPAL_TOKEN);
+                if (captureResult.success) {
+                    paypalCaptureId = captureResult.transactionId;
+                    console.log(`✅ PayPal payment captured: ${paypalCaptureId}`);
+                } else {
+                    const error = new Error('Không thể xác nhận thanh toán PayPal');
+                    error.status = 400;
+                    return next(error);
+                }
+            } catch (error) {
+                console.error('❌ Error capturing PayPal payment:', error);
+                const err = new Error('Lỗi khi xác nhận thanh toán PayPal');
+                err.status = 500;
+                return next(err);
+            }
         }
         
         const docGia = await DOCGIA.findOne({ MADOCGIA });
@@ -230,6 +358,7 @@ const createBill = async (req, res, next) => {
             
             const phieuMuon = new TheoDoiMuonSach({
                 MAPHIEU,
+                MANHANVIEN: 'system', // Mượn online luôn là system
                 MADOCGIA,
                 MA_BANSAO,
                 NGAYMUON,
@@ -252,7 +381,8 @@ const createBill = async (req, res, next) => {
         const DANHSACHPHIEU = await Promise.all(phieuMuonPromises);
         const MABILL = await generateMaBill();
         
-        const newBill = new BILL({
+        // Tạo object bill với transaction IDs nếu có
+        const billData = {
             MABILL,
             MADOCGIA,
             DANHSACHPHIEU,
@@ -260,7 +390,20 @@ const createBill = async (req, res, next) => {
             TRANGTHAI: LOAITHANHTOAN === 'cash' ? false : true,
             LOAITHANHTOAN,
             GOI: docGia.GOI.MaGoi
-        });
+        };
+        
+        // Lưu PayPal transaction IDs
+        if (LOAITHANHTOAN === 'paypal') {
+            if (paypalCaptureId) billData.PAYPAL_CAPTURE_ID = paypalCaptureId;
+            if (PAYPAL_TOKEN) billData.PAYPAL_ORDER_ID = PAYPAL_TOKEN;
+        }
+        
+        // Lưu VNPay transaction ID
+        if (LOAITHANHTOAN === 'online' && VNPAY_TRANSACTION_ID) {
+            billData.VNPAY_TRANSACTION_ID = VNPAY_TRANSACTION_ID;
+        }
+        
+        const newBill = new BILL(billData);
         
         const savedBill = await newBill.save();
         if(savedBill) {
@@ -592,20 +735,50 @@ const cancelBill = async (req, res, next) => {
         bill.BIHUY = true;
         await bill.save();
         
-        // Nếu đã thanh toán online, tạo thông báo hoàn tiền
-        if (bill.TRANGTHAI === true && bill.LOAITHANHTOAN === 'online') {
-            await notifyRefund(MADOCGIA, MABILL, bill.TONGTIEN);
+        let refundSuccess = false;
+        let refundMessage = '';
+        
+        // Xử lý hoàn tiền cho thanh toán online
+        if (bill.TRANGTHAI === true) {
+            if (bill.LOAITHANHTOAN === 'paypal' && bill.PAYPAL_CAPTURE_ID) {
+                // Hoàn tiền PayPal
+                try {
+                    const refundResult = await refundPayPalPayment(
+                        bill.PAYPAL_CAPTURE_ID,
+                        bill.TONGTIEN,
+                        `Refund for cancelled order ${MABILL}`
+                    );
+                    
+                    if (refundResult.success) {
+                        refundSuccess = true;
+                        refundMessage = 'Hủy đơn thành công. Tiền đã được hoàn trả vào tài khoản PayPal của bạn.';
+                        console.log(`✅ PayPal refund successful for bill ${MABILL}:`, refundResult.refundId);
+                    } else {
+                        refundMessage = 'Hủy đơn thành công. Yêu cầu hoàn tiền đang được xử lý.';
+                        console.warn(`⚠️ PayPal refund pending for bill ${MABILL}`);
+                    }
+                } catch (error) {
+                    console.error(`❌ PayPal refund failed for bill ${MABILL}:`, error.message);
+                    refundMessage = 'Hủy đơn thành công. Có lỗi khi hoàn tiền PayPal, vui lòng liên hệ hỗ trợ.';
+                }
+                
+                // Tạo thông báo
+                await notifyRefund(MADOCGIA, MABILL, bill.TONGTIEN);
+            } else if (bill.LOAITHANHTOAN === 'online') {
+                // VNPay - chỉ tạo thông báo (hoàn tiền thủ công)
+                await notifyRefund(MADOCGIA, MABILL, bill.TONGTIEN);
+                refundMessage = 'Hủy đơn thành công. Tiền sẽ được hoàn trả trong 3-5 ngày làm việc.';
+            }
         }
         
         res.json({
             status: 'success',
-            message: bill.TRANGTHAI === true && bill.LOAITHANHTOAN === 'online' 
-                ? 'Hủy đơn thành công. Tiền sẽ được hoàn trả trong 3-5 ngày làm việc.' 
-                : 'Hủy đơn mượn sách thành công',
+            message: refundMessage || 'Hủy đơn mượn sách thành công',
             data: {
                 MABILL: bill.MABILL,
                 canceledPhieu: phieuList.length,
-                refundAmount: bill.TRANGTHAI === true && bill.LOAITHANHTOAN === 'online' ? bill.TONGTIEN : 0
+                refundAmount: bill.TRANGTHAI === true ? bill.TONGTIEN : 0,
+                refundSuccess: refundSuccess
             }
         });
     } catch (error) {
@@ -654,6 +827,7 @@ const cleanupExpiredBills = async () => {
 export default {
     createBill,
     checkBillThanhToan,
+    checkBillPayPal,
     getBillById,
     getBillsByDocGia,
     getPendingPickupBills,

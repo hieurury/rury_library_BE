@@ -66,19 +66,6 @@ const cancelOverdueBills = async () => {
     }
 };
 
-// Chạy mỗi giờ - Cleanup bills hết hạn (15 phút)
-cron.schedule('0 * * * *', async () => {
-    console.log('🧹 [CRON] Running bill cleanup job...');
-    try {
-        const deletedCount = await billController.cleanupExpiredBills();
-        if (deletedCount > 0) {
-            console.log(`✅ [CRON] Cleanup completed: ${deletedCount} bills deleted`);
-        }
-    } catch (error) {
-        console.error('❌ [CRON] Cleanup job failed:', error);
-    }
-});
-
 // Chạy mỗi ngày lúc 2:00 SA - Hủy bills quá 3 ngày chưa thanh toán
 cron.schedule('0 2 * * *', async () => {
     console.log('🧹 [CRON] Running overdue bills cancellation job...');
@@ -92,8 +79,23 @@ cron.schedule('0 2 * * *', async () => {
     }
 });
 
+// Chạy ngay khi server khởi động
+(async () => {
+    console.log('🚀 [STARTUP] Running initial cleanup...');
+    try {
+        const deletedCount = await billController.cleanupExpiredBills();
+        const cancelledCount = await cancelOverdueBills();
+        console.log(`✅ [STARTUP] Initial cleanup completed:`);
+        console.log(`   - Expired bills deleted: ${deletedCount}`);
+        console.log(`   - Overdue bills cancelled: ${cancelledCount}`);
+    } catch (error) {
+        console.error('❌ [STARTUP] Initial cleanup failed:', error);
+    }
+})();
+
 console.log('✅ Bill cleanup jobs scheduled');
 console.log('   - Cleanup expired bills: Every hour');
 console.log('   - Cancel overdue bills: Daily at 2:00 AM');
+console.log('   - Initial cleanup: Running now...');
 
 export default {};
