@@ -173,7 +173,7 @@ const getPhieuMuonChiTiet = async (req, res, next) => {
                 MoTa: 'Hệ thống tự động mượn sách'
             };
         } else {
-            nhanVien = await NhanVien.findOne({ MANHANVIEN: phieuMuon.MANHANVIEN });
+            nhanVien = await NhanVien.findOne({ MANHANVIEN: phieuMuon.MSNV });
             if (!nhanVien) {
                 const error = new Error('Nhân viên không tồn tại');
                 error.status = 404;
@@ -242,7 +242,7 @@ const getPhieuMuonChiTiet = async (req, res, next) => {
                 DIENTHOAI: docGia.DIENTHOAI
             }
         }
-        
+        console.log(MAPHIEU);
 
         res.json({
             status: 'success',
@@ -338,8 +338,7 @@ const returnBook = async (req, res, next) => {
                     LOAI: 'lost_book',
                     NGAYVIPHAM: NGAYTRA,
                     TIENPHAT: phiMat,
-                    MAPHIEU: phieu.MAPHIEU,
-                    MA_BANSAO: phieu.MA_BANSAO
+                    MAPHIEUMUON: phieu.MAPHIEU
                 });
                 
                 await BanSaoSach.findOneAndUpdate(
@@ -355,8 +354,7 @@ const returnBook = async (req, res, next) => {
                         LOAI: 'delay',
                         NGAYVIPHAM: NGAYTRA,
                         TIENPHAT: phiTre,
-                        MAPHIEU: phieu.MAPHIEU,
-                        SONGAYTRE: soNgayTre
+                        MAPHIEUMUON: phieu.MAPHIEU
                     });
                 }
                 

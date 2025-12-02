@@ -7,7 +7,8 @@ const TheLoai = new Schema({
     TenLoai: { type: String, required: true },
     MoTa: { type: String, required: false },
     Icon: { type: String, default: 'public/imgs/categories-imgs/book.svg' },
-    Color: { type: String, default: '#4E3603' }
+    Color: { type: String, default: '#4E3603' },
+    TINHTRANG: { type: Boolean, default: true }
 }, { timestamps: true })
 
 const model = mongoose.model("TheLoai", TheLoai);

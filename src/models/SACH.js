@@ -47,6 +47,10 @@ const SACH = new Schema({
     TACGIA: {
         type: String,
         required: true
+    },
+    TINHTRANG: {
+        type: Boolean,
+        default: true
     }
 }, { timestamps: true })
 

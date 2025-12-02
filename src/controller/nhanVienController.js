@@ -2,7 +2,9 @@
 //import
 import NhanVien from "../models/NhanVien.js"
 import Counter from "../models/Counter.js"
+import jwt from "jsonwebtoken";
 import { configDotenv } from "dotenv";
+import { generateOTP, sendStaffOTPEmail } from "../utils/emailService.js";
 configDotenv();
 
 //create method
@@ -141,8 +143,31 @@ const accountLogin = async (req, res, next) => {
             return res.json({ message: "Mật khẩu không đúng!", status: "error" });
         }
 
+        // Generate JWT token
+        const token = jwt.sign(
+            { 
+                MSNV: checkAccount.MSNV, 
+                ChucVu: checkAccount.ChucVu 
+            },
+            process.env.SECRET_JWT_KEY || "your_secret_key",
+            { expiresIn: '7d' }
+        );
+
         // Đăng nhập thành công
-        res.json({ message: "Đăng nhập thành công!", account: checkAccount, status: "success" });
+        res.json({ 
+            message: "Đăng nhập thành công!", 
+            account: {
+                MSNV: checkAccount.MSNV,
+                HoTenNV: checkAccount.HoTenNV,
+                ChucVu: checkAccount.ChucVu,
+                soDienThoai: checkAccount.soDienThoai,
+                DiaChi: checkAccount.DiaChi,
+                Email: checkAccount.Email,
+                GioiTinh: checkAccount.GioiTinh
+            },
+            token,
+            status: "success" 
+        });
     } catch (err) {
         next(err);
     }
@@ -371,6 +396,283 @@ const getStaffStatistics = async (req, res, next) => {
     }
 }
 
+//GET: /account/admin/profile - Get current staff profile
+const getProfile = async (req, res, next) => {
+    try {
+        const MSNV = req.MSNV; // From JWT middleware
+        const staff = await NhanVien.findOne({ MSNV }).select('-Password -OTP');
+        
+        if (!staff) {
+            return res.status(404).json({
+                status: 'error',
+                message: 'Không tìm thấy thông tin nhân viên'
+            });
+        }
+
+        res.status(200).json({
+            status: 'success',
+            data: staff
+        });
+    } catch (err) {
+        next(err);
+    }
+};
+
+//PUT: /account/admin/profile - Update staff profile
+const updateProfile = async (req, res, next) => {
+    try {
+        const MSNV = req.MSNV; // From JWT middleware
+        const { HoTenNV, DiaChi, soDienThoai, Email, GioiTinh } = req.body;
+
+        // Check if phone/email already exists for another user
+        if (soDienThoai) {
+            const existingPhone = await NhanVien.findOne({ 
+                soDienThoai, 
+                MSNV: { $ne: MSNV } 
+            });
+            if (existingPhone) {
+                return res.status(400).json({
+                    status: 'error',
+                    message: 'Số điện thoại đã được sử dụng bởi nhân viên khác'
+                });
+            }
+        }
+
+        if (Email) {
+            const existingEmail = await NhanVien.findOne({ 
+                Email, 
+                MSNV: { $ne: MSNV } 
+            });
+            if (existingEmail) {
+                return res.status(400).json({
+                    status: 'error',
+                    message: 'Email đã được sử dụng bởi nhân viên khác'
+                });
+            }
+        }
+
+        const updatedStaff = await NhanVien.findOneAndUpdate(
+            { MSNV },
+            { HoTenNV, DiaChi, soDienThoai, Email, GioiTinh },
+            { new: true, runValidators: true }
+        ).select('-Password -OTP');
+
+        res.status(200).json({
+            status: 'success',
+            message: 'Cập nhật thông tin thành công',
+            data: updatedStaff
+        });
+    } catch (err) {
+        next(err);
+    }
+};
+
+//PUT: /account/admin/change-password - Change password
+const changePassword = async (req, res, next) => {
+    try {
+        const MSNV = req.MSNV; // From JWT middleware
+        const { currentPassword, newPassword } = req.body;
+
+        const staff = await NhanVien.findOne({ MSNV });
+        if (!staff) {
+            return res.status(404).json({
+                status: 'error',
+                message: 'Không tìm thấy nhân viên'
+            });
+        }
+
+        // Verify current password
+        if (staff.Password !== currentPassword) {
+            return res.status(401).json({
+                status: 'error',
+                message: 'Mật khẩu hiện tại không đúng'
+            });
+        }
+
+        // Update password
+        staff.Password = newPassword;
+        await staff.save();
+
+        res.status(200).json({
+            status: 'success',
+            message: 'Đổi mật khẩu thành công'
+        });
+    } catch (err) {
+        next(err);
+    }
+};
+
+//POST: /account/admin/forgot-password - Request OTP for password reset
+const forgotPassword = async (req, res, next) => {
+    try {
+        const { MSNV } = req.body;
+
+        const staff = await NhanVien.findOne({ MSNV });
+        if (!staff) {
+            return res.status(404).json({
+                status: 'error',
+                message: 'Không tìm thấy mã nhân viên này'
+            });
+        }
+
+        if (!staff.Email) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'Nhân viên chưa cập nhật email. Vui lòng liên hệ IT Support để được hỗ trợ.'
+            });
+        }
+
+        // Generate OTP and set expiry (5 minutes)
+        const otp = generateOTP();
+        const expiry = new Date(Date.now() + 5 * 60 * 1000);
+
+        staff.OTP = { code: otp, expiry };
+        await staff.save();
+
+        // Send OTP email
+        await sendStaffOTPEmail(staff.Email, otp, staff.HoTenNV);
+
+        res.status(200).json({
+            status: 'success',
+            message: `Mã OTP đã được gửi đến email ${staff.Email.replace(/(.{2})(.*)(@.*)/, '$1***$3')}`
+        });
+    } catch (err) {
+        next(err);
+    }
+};
+
+//POST: /account/admin/verify-otp - Verify OTP
+const verifyOTP = async (req, res, next) => {
+    try {
+        const { MSNV, otp } = req.body;
+
+        const staff = await NhanVien.findOne({ MSNV });
+        if (!staff) {
+            return res.status(404).json({
+                status: 'error',
+                message: 'Không tìm thấy mã nhân viên này'
+            });
+        }
+
+        if (!staff.OTP || !staff.OTP.code) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'Chưa yêu cầu mã OTP. Vui lòng yêu cầu lại.'
+            });
+        }
+
+        // Check if OTP expired
+        if (new Date() > staff.OTP.expiry) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'Mã OTP đã hết hạn. Vui lòng yêu cầu mã mới.'
+            });
+        }
+
+        // Check if OTP matches
+        if (staff.OTP.code !== otp) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'Mã OTP không chính xác'
+            });
+        }
+
+        res.status(200).json({
+            status: 'success',
+            message: 'Xác thực OTP thành công'
+        });
+    } catch (err) {
+        next(err);
+    }
+};
+
+//POST: /account/admin/reset-password - Reset password after OTP verification
+const resetPassword = async (req, res, next) => {
+    try {
+        const { MSNV, otp, newPassword } = req.body;
+
+        const staff = await NhanVien.findOne({ MSNV });
+        if (!staff) {
+            return res.status(404).json({
+                status: 'error',
+                message: 'Không tìm thấy mã nhân viên này'
+            });
+        }
+
+        // Verify OTP again
+        if (!staff.OTP || staff.OTP.code !== otp || new Date() > staff.OTP.expiry) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'Mã OTP không hợp lệ hoặc đã hết hạn'
+            });
+        }
+
+        // Update password and clear OTP
+        staff.Password = newPassword;
+        staff.OTP = undefined;
+        await staff.save();
+
+        res.status(200).json({
+            status: 'success',
+            message: 'Đặt lại mật khẩu thành công'
+        });
+    } catch (err) {
+        next(err);
+    }
+};
+
+//POST: /account/admin/master-recovery - Login using master key
+const masterRecovery = async (req, res, next) => {
+    try {
+        const { masterKey } = req.body;
+
+        const secretKey = process.env.SECRET_MASTER_KEY;
+        if (!masterKey || masterKey !== secretKey) {
+            return res.status(401).json({
+                status: 'error',
+                message: 'Master key không chính xác'
+            });
+        }
+
+        // Find the master admin (first admin created)
+        const masterAdmin = await NhanVien.findOne({ ChucVu: 'Admin' }).sort({ _id: 1 });
+        if (!masterAdmin) {
+            return res.status(404).json({
+                status: 'error',
+                message: 'Không tìm thấy tài khoản Master'
+            });
+        }
+
+        // Generate JWT token
+        const token = jwt.sign(
+            { 
+                MSNV: masterAdmin.MSNV, 
+                ChucVu: masterAdmin.ChucVu 
+            },
+            process.env.SECRET_JWT_KEY || "your_secret_key",
+            { expiresIn: '7d' }
+        );
+
+        // Return account info (same as login response)
+        res.status(200).json({
+            status: 'success',
+            message: 'Đăng nhập bằng Master key thành công',
+            account: {
+                MSNV: masterAdmin.MSNV,
+                HoTenNV: masterAdmin.HoTenNV,
+                ChucVu: masterAdmin.ChucVu,
+                soDienThoai: masterAdmin.soDienThoai,
+                DiaChi: masterAdmin.DiaChi,
+                Email: masterAdmin.Email,
+                GioiTinh: masterAdmin.GioiTinh
+            },
+            token
+        });
+    } catch (err) {
+        next(err);
+    }
+};
+
 export default {
     createNhanVien,
     createAdmin,
@@ -379,5 +681,12 @@ export default {
     getNhanVienById,
     updateNhanVien,
     deleteNhanVien,
-    getStaffStatistics
+    getStaffStatistics,
+    getProfile,
+    updateProfile,
+    changePassword,
+    forgotPassword,
+    verifyOTP,
+    resetPassword,
+    masterRecovery
 }

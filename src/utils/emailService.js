@@ -294,11 +294,49 @@ const sendAccountLockedByAdminEmail = async (email, hoTen, reason, duration, isP
     return await sendEmail(email, subject, htmlContent);
 };
 
+/**
+ * Generate 6-digit OTP
+ */
+const generateOTP = () => {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+};
+
+/**
+ * Send OTP email for staff password reset
+ */
+const sendStaffOTPEmail = async (email, otp, staffName) => {
+    const subject = 'Mã OTP đặt lại mật khẩu - Rury Library';
+    const htmlContent = `
+        <div style="font-family: Arial, sans-serif; padding: 20px; background-color: #f5f5f5;">
+            <div style="max-width: 600px; margin: 0 auto; background-color: white; padding: 30px; border-radius: 10px;">
+                <h2 style="color: #4F46E5;">Đặt lại mật khẩu tài khoản nhân viên</h2>
+                <p>Xin chào <strong>${staffName}</strong>,</p>
+                <p>Bạn đã yêu cầu đặt lại mật khẩu cho tài khoản nhân viên tại Rury Library.</p>
+                <p>Mã OTP của bạn là:</p>
+                <div style="background-color: #F3F4F6; padding: 20px; text-align: center; font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #4F46E5; margin: 20px 0;">
+                    ${otp}
+                </div>
+                <p style="color: #EF4444;"><strong>⚠️ Lưu ý:</strong> Mã OTP này sẽ hết hiệu lực sau <strong>5 phút</strong>.</p>
+                <p>Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này và liên hệ bộ phận IT ngay lập tức.</p>
+                <hr style="margin: 30px 0; border: none; border-top: 1px solid #E5E7EB;">
+                <p style="color: #6B7280; font-size: 12px;">
+                    Email này được gửi tự động từ hệ thống Rury Library.<br>
+                    Nếu có thắc mắc, vui lòng liên hệ IT Support: ${process.env.EMAIL_USER || 'support@library.com'}
+                </p>
+            </div>
+        </div>
+    `;
+
+    return await sendEmail(email, subject, htmlContent);
+};
+
 export {
     sendRegistrationEmail,
     sendBorrowNotification,
     sendDueSoonNotification,
     sendReturnNotification,
     sendAccountLockedByViolationEmail,
-    sendAccountLockedByAdminEmail
+    sendAccountLockedByAdminEmail,
+    generateOTP,
+    sendStaffOTPEmail
 };

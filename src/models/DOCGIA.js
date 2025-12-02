@@ -25,6 +25,7 @@ const NOTIFICATION = new Schema({
 })
 
 const VIPHAM = new Schema({
+    MAPHIEUMUON: { type: String, required: true },
     LOAI: { type: String, required: true, enum: ['delay', 'lost_book'] },
     NGAYVIPHAM: { type: Date, required: true, default: Date.now },
     TIENPHAT: { type: Number, required: true },

@@ -36,7 +36,8 @@ const generateMaGoi = async () => {
 
 const getAllPackages = async (req, res, next) => {
     try {
-        const packages = await Package.find({TrangThai: true});
+        // Lấy tất cả gói bao gồm cả gói bị vô hiệu hóa (cho admin)
+        const packages = await Package.find();
         
         // Thêm số lượng người đăng ký cho mỗi gói
         const packagesWithCount = await Promise.all(packages.map(async (pkg) => {
@@ -121,14 +122,58 @@ const deletePackage = async (req, res, next) => {
                 hidden: true
             });
         } else {
-            // Nếu không có ai dùng, xóa hẳn
-            await Package.findByIdAndDelete(id);
-            return res.json({
-                status: 'success',
-                message: 'Xóa gói thành công',
-                deleted: true
+            // Nếu không có ai dùng
+            if (pkg.TrangThai === false) {
+                // Gói đã bị ẩn và không có người dùng -> xóa hẳn
+                await Package.findByIdAndDelete(id);
+                return res.json({
+                    status: 'success',
+                    message: 'Xóa gói vĩnh viễn thành công',
+                    deleted: true
+                });
+            } else {
+                // Gói đang hoạt động, không ai dùng -> xóa hẳn
+                await Package.findByIdAndDelete(id);
+                return res.json({
+                    status: 'success',
+                    message: 'Xóa gói thành công',
+                    deleted: true
+                });
+            }
+        }
+    } catch (error) {
+        next(error);
+    }
+};
+
+// Kích hoạt lại gói đã bị vô hiệu hóa
+const activatePackage = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        
+        const pkg = await Package.findById(id);
+        if (!pkg) {
+            return res.status(404).json({ 
+                status: 'error',
+                message: 'Không tìm thấy gói' 
             });
         }
+        
+        if (pkg.TrangThai === true) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'Gói này đang hoạt động'
+            });
+        }
+        
+        pkg.TrangThai = true;
+        await pkg.save();
+        
+        res.json({
+            status: 'success',
+            message: 'Kích hoạt gói thành công',
+            data: pkg
+        });
     } catch (error) {
         next(error);
     }
@@ -158,5 +203,6 @@ export default {
     getAllPackages,
     uploadPackageBadge,
     updatePackage,
-    deletePackage
+    deletePackage,
+    activatePackage
 }

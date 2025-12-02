@@ -181,23 +181,142 @@ const deleteTheLoai = async (req, res, next) => {
         // Kiểm tra xem thể loại có tồn tại không
         const category = await TheLoai.findOne({ MaLoai: maLoai });
         if (!category) {
-            const error = new Error("Không tìm thấy thể loại");
-            return next(error);
+            return res.status(404).json({
+                status: "error",
+                message: "Không tìm thấy thể loại"
+            });
         }
         
         // Kiểm tra xem có sách nào đang sử dụng thể loại này không
         const books = await SACH.find({ THELOAI: maLoai });
-        if (books.length > 0) {
-            const error = new Error("Không thể xóa thể loại này vì có sách đang sử dụng");
-            return next(error);
+        const bookMASACHs = books.map(b => b.MASACH);
+        
+        // Kiểm tra có bản sao nào đang được mượn không
+        const borrowedCount = await BanSaoSach.countDocuments({ 
+            MASACH: { $in: bookMASACHs }, 
+            TRANGTHAI: true 
+        });
+        
+        if (borrowedCount > 0) {
+            // Còn sách đang được mượn -> chỉ ẩn thể loại
+            category.TINHTRANG = false;
+            await category.save();
+            return res.json({
+                status: 'warning',
+                message: `Thể loại đã được ẩn vì còn ${borrowedCount} bản sao đang được mượn`,
+                hidden: true
+            });
         }
         
-        // Xóa thể loại
-        await TheLoai.deleteOne({ MaLoai: maLoai });
+        // Không có ai mượn
+        if (category.TINHTRANG === false) {
+            // Thể loại đã bị ẩn -> xóa vĩnh viễn
+            // Xóa thể loại khỏi tất cả sách có thể loại này
+            await SACH.updateMany(
+                { THELOAI: maLoai }, 
+                { $pull: { THELOAI: maLoai } }
+            );
+            await TheLoai.deleteOne({ MaLoai: maLoai });
+            return res.json({
+                status: "success",
+                message: "Xóa thể loại vĩnh viễn thành công",
+                deleted: true
+            });
+        } else {
+            // Thể loại đang hoạt động -> ẩn trước
+            category.TINHTRANG = false;
+            await category.save();
+            return res.json({
+                status: 'warning',
+                message: "Thể loại đã được ẩn. Xóa lần nữa để xóa vĩnh viễn.",
+                hidden: true
+            });
+        }
+    } catch (error) {
+        next(error);
+    }
+}
+
+// Kích hoạt lại thể loại đã bị ẩn
+const activateTheLoai = async (req, res, next) => {
+    try {
+        const { maLoai } = req.params;
+        
+        const category = await TheLoai.findOne({ MaLoai: maLoai });
+        if (!category) {
+            return res.status(404).json({
+                status: "error",
+                message: "Không tìm thấy thể loại"
+            });
+        }
+        
+        if (category.TINHTRANG === true) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'Thể loại này đang hoạt động'
+            });
+        }
+        
+        category.TINHTRANG = true;
+        await category.save();
         
         res.json({
-            status: "success",
-            message: "Xóa thể loại thành công"
+            status: 'success',
+            message: 'Kích hoạt thể loại thành công',
+            data: category
+        });
+    } catch (error) {
+        next(error);
+    }
+}
+
+// GET: /the-loai/:maLoai/books - Lấy tất cả sách theo thể loại
+const getBooksByCategory = async (req, res, next) => {
+    try {
+        const { maLoai } = req.params;
+        
+        // Tìm thể loại
+        const category = await TheLoai.findOne({ MaLoai: maLoai });
+        if (!category) {
+            return res.status(404).json({
+                status: 'error',
+                message: 'Không tìm thấy thể loại'
+            });
+        }
+        
+        // Tìm tất cả sách thuộc thể loại này
+        const sachList = await SACH.find({ 
+            THELOAI: maLoai,
+            TINHTRANG: { $ne: false }
+        }).sort({ TENSACH: 1 });
+        
+        // Map data để lấy đầy đủ thông tin NXB và TheLoai
+        const NHAXUTBAN = (await import('../models/NHAXUATBAN.js')).default;
+        
+        const books = await Promise.all(sachList.map(async (sach) => {
+            const nxb = await NHAXUTBAN.findOne({ MANXB: sach.MAXB });
+            const theloai = await TheLoai.find({ MaLoai: { $in: sach.THELOAI } });
+            return {
+                MASACH: sach.MASACH,
+                TENSACH: sach.TENSACH,
+                MOTA: sach.MOTA,
+                DONGIA: sach.DONGIA,
+                SOQUYEN: sach.SOQUYEN,
+                NAMXUATBAN: sach.NAMXUATBAN,
+                MAXB: nxb,
+                TACGIA: sach.TACGIA,
+                HINHANH: sach.HINHANH,
+                THELOAI: theloai,
+            };
+        }));
+        
+        res.json({
+            status: 'success',
+            message: `Tìm thấy ${books.length} sách thuộc thể loại "${category.TenLoai}"`,
+            data: {
+                category: category,
+                books: books
+            }
         });
     } catch (error) {
         next(error);
@@ -210,5 +329,7 @@ export default {
     getAllCategories,
     getTopCategories,
     updateTheLoai,
-    deleteTheLoai
+    deleteTheLoai,
+    activateTheLoai,
+    getBooksByCategory
 };

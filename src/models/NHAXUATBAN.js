@@ -17,6 +17,10 @@ const NHAXUATBAN = new Schema({
     DIACHI: {
         type: String,
     },
+    TINHTRANG: {
+        type: Boolean,
+        default: true
+    }
 })
 
 //setup option

@@ -158,20 +158,84 @@ const deleteBook = async (req, res, next) => {
     try {
         const { maSach } = req.params;
 
-        // Xóa sách
-        const sachDeleted = await SACH.findOneAndDelete({ MASACH: maSach });
-        if (!sachDeleted) {
-            const error = new Error("Sách không tồn tại");
-            // error.statusCode = 404;
-            return next(error);
+        // Kiểm tra sách có tồn tại không
+        const sach = await SACH.findOne({ MASACH: maSach });
+        if (!sach) {
+            return res.status(404).json({
+                status: "error",
+                message: "Sách không tồn tại"
+            });
         }
 
-        // Xóa bản sao
-        await BanSaoSach.deleteMany({ MASACH: maSach });
+        // Kiểm tra có bản sao nào đang được mượn không (TRANGTHAI = true là đang được mượn)
+        const borrowedCopies = await BanSaoSach.countDocuments({ 
+            MASACH: maSach, 
+            TRANGTHAI: true 
+        });
 
+        if (borrowedCopies > 0) {
+            // Còn người mượn -> chỉ ẩn sách
+            sach.TINHTRANG = false;
+            await sach.save();
+            return res.json({
+                status: "warning",
+                message: `Sách đã được ẩn vì còn ${borrowedCopies} bản sao đang được mượn`,
+                hidden: true
+            });
+        }
+
+        // Không có ai mượn
+        if (sach.TINHTRANG === false) {
+            // Sách đã bị ẩn -> xóa vĩnh viễn
+            await SACH.findOneAndDelete({ MASACH: maSach });
+            await BanSaoSach.deleteMany({ MASACH: maSach });
+            return res.json({
+                status: "success",
+                message: "Xóa sách vĩnh viễn thành công",
+                deleted: true
+            });
+        } else {
+            // Sách đang hoạt động, không ai mượn -> ẩn trước
+            sach.TINHTRANG = false;
+            await sach.save();
+            return res.json({
+                status: "warning",
+                message: "Sách đã được ẩn. Xóa lần nữa để xóa vĩnh viễn.",
+                hidden: true
+            });
+        }
+    } catch (error) {
+        next(error);
+    }
+}
+
+// Kích hoạt lại sách đã bị ẩn
+const activateBook = async (req, res, next) => {
+    try {
+        const { maSach } = req.params;
+        
+        const sach = await SACH.findOne({ MASACH: maSach });
+        if (!sach) {
+            return res.status(404).json({
+                status: "error",
+                message: "Sách không tồn tại"
+            });
+        }
+        
+        if (sach.TINHTRANG === true) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'Sách này đang hoạt động'
+            });
+        }
+        
+        sach.TINHTRANG = true;
+        await sach.save();
+        
         res.json({
-            status: "success",
-            message: "Xóa sách thành công"
+            status: 'success',
+            message: 'Kích hoạt sách thành công',
+            data: sach
         });
     } catch (error) {
         next(error);
@@ -367,14 +431,75 @@ const getTopBooks = async (req, res, next) => {
     }
 }
 
+// API: Tìm kiếm sách
+const searchSach = async (req, res, next) => {
+    try {
+        const { q } = req.query;
+        
+        if (!q || !q.trim()) {
+            return res.json({
+                status: "success",
+                message: "Vui lòng nhập từ khóa tìm kiếm",
+                data: []
+            });
+        }
+
+        const searchQuery = q.trim();
+        
+        // Tìm thể loại có tên khớp với từ khóa
+        const matchingCategories = await TheLoai.find({
+            TenLoai: { $regex: searchQuery, $options: 'i' }
+        });
+        const matchingCategoryIds = matchingCategories.map(cat => cat.MaLoai);
+        
+        // Tìm kiếm theo nhiều trường: tên sách, tác giả, mô tả, thể loại
+        const sachList = await SACH.find({
+            $or: [
+                { TENSACH: { $regex: searchQuery, $options: 'i' } },
+                { TACGIA: { $regex: searchQuery, $options: 'i' } },
+                { MOTA: { $regex: searchQuery, $options: 'i' } },
+                { THELOAI: { $in: matchingCategoryIds } }
+            ]
+        }).sort({ TENSACH: 1 });
+
+        // Map data giống getAllSach để lấy đầy đủ thông tin NXB và TheLoai
+        const results = await Promise.all(sachList.map(async (sach) => {
+            const nxb = await NHAXUTBAN.findOne({ MANXB: sach.MAXB });
+            const theloai = await TheLoai.find({ MaLoai: { $in: sach.THELOAI } });
+            return {
+                MASACH: sach.MASACH,
+                TENSACH: sach.TENSACH,
+                MOTA: sach.MOTA,
+                DONGIA: sach.DONGIA,
+                SOQUYEN: sach.SOQUYEN,
+                NAMXUATBAN: sach.NAMXUATBAN,
+                MAXB: nxb,
+                TACGIA: sach.TACGIA,
+                HINHANH: sach.HINHANH,
+                THELOAI: theloai,
+            };
+        }));
+
+        res.json({
+            status: "success",
+            message: `Tìm thấy ${results.length} kết quả cho "${searchQuery}"`,
+            data: results
+        });
+    } catch (error) {
+        next(error);
+    }
+}
+
 export default {
     createSach,
     getAllSach,
     uploadBookImage,
     deleteBook,
+    activateBook,
     updateBook,
     getSachById,
     getTemplateSach,
     getTopBooks,
-    getAvailableCopies
+    getAvailableCopies,
+    searchSach
 }

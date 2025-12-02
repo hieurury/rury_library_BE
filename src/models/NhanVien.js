@@ -30,6 +30,19 @@ const NhanVien = new Schema({
         type: String,
         unique: true,
         required: true
+    },
+    Email: {
+        type: String,
+        unique: true,
+        sparse: true // Allows null values while maintaining uniqueness
+    },
+    GioiTinh: {
+        type: String,
+        enum: ["Nam", "Nữ", "Khác"],
+    },
+    OTP: {
+        code: String,
+        expiry: Date
     }
 })
 
