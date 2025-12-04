@@ -25,11 +25,16 @@ const NOTIFICATION = new Schema({
 })
 
 const VIPHAM = new Schema({
-    MAPHIEUMUON: { type: String, required: true },
+    MAPHIEUMUON: { type: String, default: 'UNKNOWN' },
     LOAI: { type: String, required: true, enum: ['delay', 'lost_book'] },
     NGAYVIPHAM: { type: Date, required: true, default: Date.now },
     TIENPHAT: { type: Number, required: true },
 })
+
+const OTP_SCHEMA = new Schema({
+    code: { type: String },
+    expiresAt: { type: Date }
+}, { _id: false })
 
 const DOCGIA = new Schema({
     MADOCGIA: { type: String, required: true, unique: true },
@@ -48,7 +53,8 @@ const DOCGIA = new Schema({
     CACVIPHAM: { type: [VIPHAM], default: [] },
     TRANGTHAI: { type: Boolean, required: true, default: true },
     NGAYMOKHOA: { type: Date, required: false },
-    NOTIFICATIONS: { type: [NOTIFICATION], default: [] }
+    NOTIFICATIONS: { type: [NOTIFICATION], default: [] },
+    OTP: { type: OTP_SCHEMA, default: null }
 })
 
 const model = mongoose.model('DOCGIA', DOCGIA);

@@ -10,6 +10,9 @@ import userController   from    "../controller/userController.js";
 
 userRouter.post("/register", userController.register);
 userRouter.post("/login", userController.login);
+userRouter.post("/forgot-password", userController.forgotPassword);
+userRouter.post("/verify-otp", userController.verifyOTP);
+userRouter.post("/reset-password", userController.resetPassword);
 
 userRouter.get("/admin/all", userController.getAllUsers);
 userRouter.get("/admin/statistics", userController.getUserStatistics);

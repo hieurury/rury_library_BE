@@ -4,7 +4,7 @@ import Package  from "../models/Package.js";
 import TheoDoiMuonSach from "../models/THEODOIMUONSACH.js";
 import jwt      from "jsonwebtoken";
 import dotenv   from "dotenv";
-import { sendAccountLockedByAdminEmail } from "../utils/emailService.js";
+import { sendAccountLockedByAdminEmail, generateOTP, sendUserOTPEmail } from "../utils/emailService.js";
 dotenv.config();
 
 const generateAccountId = async () => {
@@ -707,6 +707,127 @@ const getUserStatistics = async (req, res, next) => {
     }
 };
 
+// Gửi OTP để đặt lại mật khẩu
+const forgotPassword = async (req, res, next) => {
+    const { EMAIL } = req.body;
+    try {
+        const docGia = await DocGia.findOne({ EMAIL });
+        if (!docGia) {
+            const error = new Error("Email này chưa được đăng ký trong hệ thống");
+            return next(error);
+        }
+
+        // Tạo OTP
+        const otp = generateOTP();
+        const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 phút
+
+        // Lưu OTP vào database
+        docGia.OTP = {
+            code: otp,
+            expiresAt: expiresAt
+        };
+        await docGia.save();
+
+        // Gửi email OTP
+        const userName = `${docGia.HOLOT} ${docGia.TEN}`;
+        const emailSent = await sendUserOTPEmail(EMAIL, otp, userName);
+
+        if (!emailSent) {
+            const error = new Error("Không thể gửi email. Vui lòng thử lại sau");
+            return next(error);
+        }
+
+        res.json({
+            status: "success",
+            message: "Mã OTP đã được gửi đến email của bạn"
+        });
+    } catch (error) {
+        return next(error);
+    }
+};
+
+// Xác thực OTP
+const verifyOTP = async (req, res, next) => {
+    const { EMAIL, OTP } = req.body;
+    try {
+        const docGia = await DocGia.findOne({ EMAIL });
+        
+        if (!docGia) {
+            const error = new Error("Email không tồn tại trong hệ thống");
+            return next(error);
+        }
+
+        if (!docGia.OTP || !docGia.OTP.code) {
+            const error = new Error("OTP không tồn tại. Vui lòng yêu cầu mã mới");
+            return next(error);
+        }
+
+        if (new Date() > new Date(docGia.OTP.expiresAt)) {
+            // Xóa OTP hết hạn
+            docGia.OTP = null;
+            await docGia.save();
+            const error = new Error("OTP đã hết hạn. Vui lòng yêu cầu mã mới");
+            return next(error);
+        }
+
+        if (docGia.OTP.code !== OTP) {
+            const error = new Error("Mã OTP không chính xác");
+            return next(error);
+        }
+
+        // OTP hợp lệ - tạo token tạm thời để đặt lại mật khẩu
+        const resetToken = jwt.sign(
+            { EMAIL, MADOCGIA: docGia.MADOCGIA, purpose: 'reset_password' },
+            process.env.SECRET_JWT_KEY,
+            { expiresIn: '10m' }
+        );
+
+        res.json({
+            status: "success",
+            message: "Xác thực OTP thành công",
+            resetToken
+        });
+    } catch (error) {
+        return next(error);
+    }
+};
+
+// Đặt lại mật khẩu
+const resetPassword = async (req, res, next) => {
+    const { resetToken, newPassword } = req.body;
+    try {
+        // Xác thực token
+        const decoded = jwt.verify(resetToken, process.env.SECRET_JWT_KEY);
+        
+        if (decoded.purpose !== 'reset_password') {
+            const error = new Error("Token không hợp lệ");
+            return next(error);
+        }
+
+        // Cập nhật mật khẩu
+        const docGia = await DocGia.findOne({ MADOCGIA: decoded.MADOCGIA });
+        if (!docGia) {
+            const error = new Error("Không tìm thấy tài khoản");
+            return next(error);
+        }
+
+        docGia.PASSWORD = newPassword;
+        docGia.OTP = null; // Xóa OTP sau khi đặt lại mật khẩu thành công
+        await docGia.save();
+
+        res.json({
+            status: "success",
+            message: "Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại"
+        });
+    } catch (error) {
+        if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+            const err = new Error("Token không hợp lệ hoặc đã hết hạn");
+            return next(err);
+        }
+        return next(error);
+    }
+};
+
 export default {
     register,
     login,
@@ -725,5 +846,8 @@ export default {
     uploadAvatar,
     lockUser,
     unlockUser,
-    getUserStatistics
+    getUserStatistics,
+    forgotPassword,
+    verifyOTP,
+    resetPassword
 }

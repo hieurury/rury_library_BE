@@ -330,6 +330,35 @@ const sendStaffOTPEmail = async (email, otp, staffName) => {
     return await sendEmail(email, subject, htmlContent);
 };
 
+/**
+ * Send OTP email for user password reset
+ */
+const sendUserOTPEmail = async (email, otp, userName) => {
+    const subject = 'Mã OTP đặt lại mật khẩu - Thư viện Rury';
+    const htmlContent = `
+        <div style="font-family: Arial, sans-serif; padding: 20px; background-color: #f5f5f5;">
+            <div style="max-width: 600px; margin: 0 auto; background-color: white; padding: 30px; border-radius: 10px;">
+                <h2 style="color: #880888;">Đặt lại mật khẩu tài khoản</h2>
+                <p>Xin chào <strong>${userName}</strong>,</p>
+                <p>Bạn đã yêu cầu đặt lại mật khẩu cho tài khoản độc giả tại Thư viện Rury.</p>
+                <p>Mã OTP của bạn là:</p>
+                <div style="background-color: #F3F4F6; padding: 20px; text-align: center; font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #880888; margin: 20px 0;">
+                    ${otp}
+                </div>
+                <p style="color: #EF4444;"><strong>⚠️ Lưu ý:</strong> Mã OTP này sẽ hết hiệu lực sau <strong>5 phút</strong>.</p>
+                <p>Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này.</p>
+                <hr style="margin: 30px 0; border: none; border-top: 1px solid #E5E7EB;">
+                <p style="color: #6B7280; font-size: 12px;">
+                    Email này được gửi tự động từ hệ thống Thư viện Rury.<br>
+                    Nếu có thắc mắc, vui lòng liên hệ: ${process.env.EMAIL_USER || 'support@library.com'}
+                </p>
+            </div>
+        </div>
+    `;
+
+    return await sendEmail(email, subject, htmlContent);
+};
+
 export {
     sendRegistrationEmail,
     sendBorrowNotification,
@@ -338,5 +367,6 @@ export {
     sendAccountLockedByViolationEmail,
     sendAccountLockedByAdminEmail,
     generateOTP,
-    sendStaffOTPEmail
+    sendStaffOTPEmail,
+    sendUserOTPEmail
 };
