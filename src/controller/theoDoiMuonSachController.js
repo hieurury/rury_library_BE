@@ -87,6 +87,14 @@ const createMuonSachBulk = async (req, res, next) => {
             return next(error);
         }
         
+        // Kiểm tra sách bị mất
+        const lostBooks = banSaoList.filter(bs => bs.TINHTRANG === 'lost');
+        if (lostBooks.length > 0) {
+            const error = new Error(`Các bản sao sau đã bị mất và không thể mượn: ${lostBooks.map(bs => bs.MA_BANSAO).join(', ')}`);
+            error.status = 400;
+            return next(error);
+        }
+        
         const sachDangMuon = await TheoDoiMuonSach.find({ 
             MA_BANSAO: { $in: LIST_MA_BANSAO }, 
             TINHTRANG: 'borrowing' 

@@ -114,6 +114,13 @@ const checkBillThanhToan = async (req, res, next) => {
                 return next(error);
             }
             
+            // LOST: Sách đã bị mất
+            if (banSao.TINHTRANG === 'lost') {
+                const error = new Error(`Bản sao ${MA_BANSAO} đã bị mất và không thể mượn`);
+                error.status = 400;
+                return next(error);
+            }
+            
             // SOFT LOCK: Sách đang chờ thanh toán của user khác
             if (banSao.PENDING_BILL && banSao.PENDING_BILL !== '') {
                 const error = new Error(`Bản sao ${MA_BANSAO} đang được giữ chỗ bởi đơn khác. Vui lòng chọn bản sao khác.`);
@@ -242,6 +249,13 @@ const checkBillPayPal = async (req, res, next) => {
                 return next(error);
             }
             
+            // LOST: Sách đã bị mất
+            if (banSao.TINHTRANG === 'lost') {
+                const error = new Error(`Bản sao ${MA_BANSAO} đã bị mất và không thể mượn`);
+                error.status = 400;
+                return next(error);
+            }
+            
             // SOFT LOCK: Sách đang chờ thanh toán
             if (banSao.PENDING_BILL && banSao.PENDING_BILL !== '') {
                 const error = new Error(`Bản sao ${MA_BANSAO} đang được giữ chỗ bởi đơn khác. Vui lòng chọn bản sao khác.`);
@@ -341,6 +355,12 @@ const createBill = async (req, res, next) => {
             }
             if(banSao.TRANGTHAI === true) {
                 const error = new Error(`Có lỗi xảy ra trong quá trình xử lí mượn sách`);
+                error.status = 400;
+                return next(error);
+            }
+            // Kiểm tra sách bị mất
+            if(banSao.TINHTRANG === 'lost') {
+                const error = new Error(`Bản sao ${MA_BANSAO} đã bị mất và không thể mượn`);
                 error.status = 400;
                 return next(error);
             }

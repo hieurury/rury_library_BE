@@ -18,10 +18,11 @@ const getAvailableCopies = async (req, res, next) => {
             return next(error);
         }
         
-        // Lấy tất cả bản sao available (TRANGTHAI = false)
+        // Lấy tất cả bản sao available (TRANGTHAI = false và không bị mất)
         const availableCopies = await BanSaoSach.find({
             MASACH,
-            TRANGTHAI: false // Chưa được mượn
+            TRANGTHAI: false, // Chưa được mượn
+            TINHTRANG: { $ne: 'lost' } // Không bị mất
         }).sort({ TINHTRANG: -1 }); // Ưu tiên 'new' trước 'old'
         
         res.json({
