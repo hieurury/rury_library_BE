@@ -115,6 +115,7 @@ const login = async (req, res, next) => {
             TEN: docGia.TEN,
             DIENTHOAI: docGia.DIENTHOAI,
             EMAIL: docGia.EMAIL,
+            AVATAR: docGia.AVATAR,
         }
         res.json({
             status: "success",
