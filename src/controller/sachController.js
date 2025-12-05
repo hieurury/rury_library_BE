@@ -354,11 +354,77 @@ const updateBook = async (req, res, next) => {
         const { id } = req.params;
         const data = req.body;
 
-        const updatedBook = await SACH.findOneAndUpdate({ MASACH: id }, data, { new: true });
-        if (!updatedBook) {
+        // Tìm sách hiện tại
+        const currentBook = await SACH.findOne({ MASACH: id });
+        if (!currentBook) {
             const error = new Error("Không tìm thấy sách");
+            error.status = 404;
             return next(error);
         }
+
+        // Xử lý thay đổi số lượng bản sao
+        if (data.SOQUYEN !== undefined && data.SOQUYEN !== currentBook.SOQUYEN) {
+            const newQuantity = parseInt(data.SOQUYEN);
+            const oldQuantity = currentBook.SOQUYEN;
+            const difference = newQuantity - oldQuantity;
+
+            if (difference > 0) {
+                // TĂNG số lượng -> Tạo thêm bản sao mới
+                const existingCopies = await BanSaoSach.find({ MASACH: id });
+                const MA_DA_CO = existingCopies.map(c => c.MA_BANSAO);
+
+                const newCopies = [];
+                for (let i = 0; i < difference; i++) {
+                    const maBanSao = await generateMaBanSao(id, MA_DA_CO);
+                    MA_DA_CO.push(maBanSao);
+                    newCopies.push({
+                        MASACH: id,
+                        MA_BANSAO: maBanSao,
+                        TRANGTHAI: false,
+                        TINHTRANG: 'new'
+                    });
+                }
+
+                await BanSaoSach.insertMany(newCopies);
+                console.log(`Đã tạo thêm ${difference} bản sao cho sách ${id}`);
+
+            } else if (difference < 0) {
+                // GIẢM số lượng -> Xóa bản sao chưa mượn
+                const copiesToRemove = Math.abs(difference);
+                
+                // Tìm các bản sao chưa được mượn (TRANGTHAI = false) và không bị mất
+                const availableCopies = await BanSaoSach.find({ 
+                    MASACH: id, 
+                    TRANGTHAI: false,
+                    TINHTRANG: { $ne: 'lost' }
+                });
+
+                if (availableCopies.length < copiesToRemove) {
+                    const error = new Error(
+                        `Không thể giảm ${copiesToRemove} bản sao. Chỉ có ${availableCopies.length} bản sao chưa mượn có thể xóa.`
+                    );
+                    error.status = 400;
+                    return next(error);
+                }
+
+                // Xóa các bản sao (ưu tiên xóa bản sao cũ trước)
+                const copiesToDelete = availableCopies
+                    .sort((a, b) => {
+                        // Ưu tiên xóa 'old' trước 'new'
+                        if (a.TINHTRANG === 'old' && b.TINHTRANG === 'new') return -1;
+                        if (a.TINHTRANG === 'new' && b.TINHTRANG === 'old') return 1;
+                        return 0;
+                    })
+                    .slice(0, copiesToRemove);
+
+                const maBanSaoToDelete = copiesToDelete.map(c => c.MA_BANSAO);
+                await BanSaoSach.deleteMany({ MA_BANSAO: { $in: maBanSaoToDelete } });
+                console.log(`Đã xóa ${copiesToRemove} bản sao cho sách ${id}: ${maBanSaoToDelete.join(', ')}`);
+            }
+        }
+
+        // Cập nhật thông tin sách
+        const updatedBook = await SACH.findOneAndUpdate({ MASACH: id }, data, { new: true });
 
         res.json({
             status: "success",
